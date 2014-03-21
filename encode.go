@@ -10,7 +10,6 @@ import (
 	"io"
 	"reflect"
 	"strconv"
-	"strings"
 )
 
 type bytesBuffer struct {
@@ -41,8 +40,10 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		return nil
 	}
 	switch v.Kind() {
-	case reflect.Complex64, reflect.Complex128:
-		enc.encodeComplex(v)
+	case reflect.Complex64:
+		enc.encodeComplex(v, 32)
+	case reflect.Complex128:
+		enc.encodeComplex(v, 64)
 	case reflect.String:
 		enc.encodeString(v)
 	case reflect.Array:
@@ -65,6 +66,15 @@ func (enc *Encoder) encode(v reflect.Value) error {
 // TODO:
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	enc.WriteByte('{')
+	t := v.Type()
+	for i := 0; i < t.NumField(); i++ {
+		enc.WriteString(t.Field(i).Name)
+		enc.WriteString(": ")
+		enc.encode(v.Field(i))
+		if i < t.NumField()-1 {
+			enc.WriteString(", ")
+		}
+	}
 	enc.WriteByte('}')
 }
 
@@ -72,13 +82,15 @@ func (enc *Encoder) encodeNil() {
 	enc.WriteString("nil")
 }
 
-func (enc *Encoder) encodeComplex(v reflect.Value) {
-	enc.WriteString(
-		strings.Trim(
-			fmt.Sprint(v.Interface()),
-			"()",
-		),
-	)
+func (enc *Encoder) encodeComplex(v reflect.Value, bitSize int) {
+	c := v.Complex()
+	r, i := real(c), imag(c)
+	enc.WriteString(strconv.FormatFloat(r, 'g', -1, bitSize))
+	if i >= 0 {
+		enc.WriteByte('+')
+	}
+	enc.WriteString(strconv.FormatFloat(i, 'g', -1, bitSize))
+	enc.WriteByte('i')
 }
 
 func (enc *Encoder) encodeString(v reflect.Value) {
@@ -88,14 +100,6 @@ func (enc *Encoder) encodeString(v reflect.Value) {
 }
 
 func (enc *Encoder) encodeRef(v reflect.Value) {
-	if v.IsNil() {
-		enc.encodeNil()
-		return
-	}
-	enc.encode(v.Elem())
-}
-
-func (enc *Encoder) encodeInterface(v reflect.Value) {
 	if v.IsNil() {
 		enc.encodeNil()
 		return

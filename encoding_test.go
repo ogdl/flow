@@ -44,6 +44,8 @@ var encodingTestGroups = []encodingTestGroup{
 			{-3.1415, "-3.1415"},
 
 			{1.2 + 3.4i, "1.2+3.4i"},
+			{5.6i, "0+5.6i"},
+			{-7.8i, "0-7.8i"},
 		},
 	},
 
@@ -76,6 +78,8 @@ var encodingTestGroups = []encodingTestGroup{
 		[]encodingTestCase{
 			{complex64(-2.3 + 4.5i), "-2.3+4.5i"},
 			{complex128(4.5 - 6.7i), "4.5-6.7i"},
+			{complex64(4.5i), "0+4.5i"},
+			{complex128(4.5), "4.5+0i"},
 		},
 	},
 
@@ -105,6 +109,16 @@ var encodingTestGroups = []encodingTestGroup{
 	{"struct",
 		[]encodingTestCase{
 			{struct{}{}, "{}"},
+			{struct{ IVal int }{IVal: 1}, "{IVal: 1}"},
+			{struct {
+				IVal int
+				SVal string
+			}{IVal: 1, SVal: "a"}, `{IVal: 1, SVal: "a"}`},
+		},
+	},
+
+	{"map",
+		[]encodingTestCase{
 		},
 	},
 

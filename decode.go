@@ -9,8 +9,8 @@ import (
 	"io"
 	"math/big"
 	"reflect"
-	"regexp"
 	"strconv"
+	"strings"
 )
 
 type Decoder struct {
@@ -37,8 +37,10 @@ func (dec *Decoder) decode(v reflect.Value) error {
 	if v.Kind() == reflect.Ptr {
 		v = deref(v).Elem()
 		switch v.Kind() {
-		case reflect.Slice, reflect.Array:
-			return dec.decodeList(v)
+		case reflect.Slice:
+			return dec.decodeSlice(v)
+		case reflect.Array:
+			return dec.decodeArray(v)
 		case reflect.Struct:
 			return dec.decodeStruct(v)
 		}
@@ -60,10 +62,8 @@ func (dec *Decoder) decode(v reflect.Value) error {
 		return dec.decodeFloat32(v, tokenVal)
 	case reflect.Float64:
 		return dec.decodeFloat64(v, tokenVal)
-	case reflect.Complex64:
-		return dec.decodeComplex64(v, tokenVal)
-	case reflect.Complex128:
-		return dec.decodeComplex128(v, tokenVal)
+	case reflect.Complex64, reflect.Complex128:
+		return dec.decodeComplex(v, tokenVal)
 	case reflect.String:
 		return dec.decodeString(v, tokenVal)
 	}
@@ -124,45 +124,13 @@ func (dec *Decoder) decodeFloat64(v reflect.Value, val []byte) error {
 	return nil
 }
 
-var reComplex = regexp.MustCompile(`((?:\+|-)?.+)?((?:\+|-).+)i`)
-
-func (dec *Decoder) decodeComplex64(v reflect.Value, val []byte) error {
-	m := reComplex.FindSubmatch(val)
-	if m == nil {
-		return fmt.Errorf("unexpected complex value: %s", strconv.Quote(string(val)))
+func (dec *Decoder) decodeComplex(v reflect.Value, val []byte) error {
+	var c complex128
+	if _, err := fmt.Sscan(string(val), &c); err != nil {
+		return err
 	}
-	if len(m) > 2 {
-		r, err := strconv.ParseFloat(string(m[1]), 32)
-		if err != nil {
-			return err
-		}
-		i, err := strconv.ParseFloat(string(m[2]), 32)
-		if err != nil {
-			return err
-		}
-		v.SetComplex(complex(r, i))
-	}
-	// TODO: handle error
-	return nil
-}
-
-func (dec *Decoder) decodeComplex128(v reflect.Value, val []byte) error {
-	m := reComplex.FindSubmatch(val)
-	if m == nil {
-		return fmt.Errorf("unexpected complex value: %s", strconv.Quote(string(val)))
-	}
-	if len(m) > 2 {
-		r, err := strconv.ParseFloat(string(m[1]), 64)
-		if err != nil {
-			return err
-		}
-		i, err := strconv.ParseFloat(string(m[2]), 64)
-		if err != nil {
-			return err
-		}
-		v.SetComplex(complex(r, i))
-	}
-	// TODO: handle error
+	// TODO: handle overflow
+	v.SetComplex(c)
 	return nil
 }
 
@@ -175,19 +143,58 @@ func (dec *Decoder) decodeString(v reflect.Value, val []byte) error {
 	return nil
 }
 
-func (dec *Decoder) decodeList(sv reflect.Value) error {
-	isNil, err := dec.expectNilOrListStart()
-	if err != nil {
-		return err
-	}
-	if isNil {
-		sv.Set(reflect.Zero(sv.Type()))
+func (dec *Decoder) decodeSlice(v reflect.Value) error {
+	if err := dec.expectNil(); err == nil {
+		v.Set(reflect.Zero(v.Type()))
 		return nil
+	}
+	i := -1
+	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+		i++
+		if i == list.Len() {
+			list.Set(reflect.Append(list, reflect.New(list.Type().Elem()).Elem()))
+		}
+		return list.Index(i), nil
+	})
+}
+
+func (dec *Decoder) decodeArray(v reflect.Value) error {
+	i := -1
+	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+		i++
+		if i < list.Len() {
+			return list.Index(i), nil
+		} else {
+			return reflect.Value{}, nil
+		}
+	})
+}
+
+func (dec *Decoder) decodeStruct(v reflect.Value) error {
+	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+		fieldName, err := dec.expectFieldName()
+		if err != nil {
+			return reflect.Value{}, err
+		}
+		if err := dec.next(); err != nil {
+			return reflect.Value{}, err
+		}
+		elemVal := reflect.Value{}
+		if field := v.FieldByName(fieldName); field.CanSet() {
+			elemVal = field
+		}
+		return elemVal, nil
+	})
+}
+
+func (dec *Decoder) decodeList(sv reflect.Value, getElemVal func(list reflect.Value) (reflect.Value, error)) error {
+	if err := dec.expectListStart(); err != nil {
+		return err
 	}
 	if err := dec.next(); err != nil {
 		return err
 	}
-	for i := 0; ; i++ {
+	for {
 		isElem, err := dec.expectListEndOrElem()
 		if err != nil {
 			return err
@@ -195,23 +202,20 @@ func (dec *Decoder) decodeList(sv reflect.Value) error {
 		if !isElem {
 			break
 		}
-		if sv.Kind() == reflect.Slice {
-			sv.Set(reflect.Append(sv, reflect.New(sv.Type().Elem()).Elem()))
+		elemVal, err := getElemVal(sv)
+		if err != nil {
+			return err
 		}
-		if err := dec.decode(sv.Index(i)); err != nil {
+		if err := dec.decode(elemVal); err != nil {
 			return err
 		}
 		if err := dec.next(); err != nil {
 			return err
 		}
-		if err := dec.expectElemSep(); err != nil {
+		if err := dec.expectElemSepOrListEnd(); err != nil {
 			return err
 		}
 	}
-	return nil
-}
-
-func (dec *Decoder) decodeStruct(sv reflect.Value) error {
 	return nil
 }
 
@@ -226,6 +230,23 @@ func (dec *Decoder) next() error {
 	return dec.err
 }
 
+func (dec *Decoder) expectFieldName() (string, error) {
+	val, err := dec.expectValue()
+	if err != nil {
+		return "", err
+	}
+
+	if len(val) == 0 {
+		return "", dec.error()
+	}
+
+	if val[len(val)-1] == ':' {
+		val = val[:len(val)-1]
+	}
+
+	return strings.Title(string(val)), nil
+}
+
 func (dec *Decoder) expectValue() ([]byte, error) {
 	if dec.token.typ == tokenString {
 		return dec.token.val, nil
@@ -233,14 +254,25 @@ func (dec *Decoder) expectValue() ([]byte, error) {
 	return nil, dec.error()
 }
 
-func (dec *Decoder) expectNilOrListStart() (isNil bool, _ error) {
+func (dec *Decoder) expectListStart() error {
 	if dec.token.typ == tokenLeftBrace {
-		return false, nil
-	} else if dec.token.typ == tokenString && string(dec.token.val) == "nil" {
-		return true, nil
-
+		return nil
 	}
-	return false, dec.error()
+	return dec.error()
+}
+
+func (dec *Decoder) expectNil() error {
+	if dec.token.typ == tokenString && string(dec.token.val) == "nil" {
+		return nil
+	}
+	return dec.error()
+}
+
+func (dec *Decoder) expectNilOrListStart() (isNil bool, _ error) {
+	if err := dec.expectNil(); err == nil {
+		return true, nil
+	}
+	return false, dec.expectListStart()
 }
 
 func (dec *Decoder) expectListEndOrElem() (isElem bool, _ error) {
@@ -252,7 +284,7 @@ func (dec *Decoder) expectListEndOrElem() (isElem bool, _ error) {
 	return false, dec.error()
 }
 
-func (dec *Decoder) expectElemSep() error {
+func (dec *Decoder) expectElemSepOrListEnd() error {
 	if dec.token.typ == tokenComma {
 		if err := dec.next(); err != nil {
 			return err
