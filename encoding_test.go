@@ -17,6 +17,11 @@ import (
 
 type intSlice []int
 
+type structKey struct {
+	IKey int
+	SKey string
+}
+
 type encodingTestGroup struct {
 	desc  string
 	cases []encodingTestCase
@@ -123,7 +128,8 @@ var encodingTestGroups = []encodingTestGroup{
 			{make(map[string]bool), "{}"},
 			{map[string]bool{"a": true, "b": false}, `{"a": true, "b": false}`},
 			{map[int]bool{1: true, 2: false}, `{1: true, 2: false}`},
-			// TODO: map with struct key
+			{map[structKey]bool{structKey{1, "a"}: true, structKey{2, "b"}: false},
+				`{{IKey: 1, SKey: "a"}: true, {IKey: 2, SKey: "b"}: false}`},
 		},
 	},
 

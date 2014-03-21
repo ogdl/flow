@@ -32,20 +32,20 @@ func (dec *Decoder) Decode(e interface{}) error {
 
 func (dec *Decoder) decode(v reflect.Value) error {
 	if !v.CanSet() && v.Kind() != reflect.Ptr { // interface should also be allowed.
-		return fmt.Errorf("unsetable nonpointer value: %v", v)
+		return fmt.Errorf("unsetable nonpointer value: %v, %v", v)
 	}
 	if v.Kind() == reflect.Ptr {
 		v = deref(v).Elem()
-		switch v.Kind() {
-		case reflect.Slice:
-			return dec.decodeSlice(v)
-		case reflect.Array:
-			return dec.decodeArray(v)
-		case reflect.Struct:
-			return dec.decodeStruct(v)
-		case reflect.Map:
-			return dec.decodeMap(v)
-		}
+	}
+	switch v.Kind() {
+	case reflect.Slice:
+		return dec.decodeSlice(v)
+	case reflect.Array:
+		return dec.decodeArray(v)
+	case reflect.Struct:
+		return dec.decodeStruct(v)
+	case reflect.Map:
+		return dec.decodeMap(v)
 	}
 
 	// values
