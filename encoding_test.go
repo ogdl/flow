@@ -119,6 +119,11 @@ var encodingTestGroups = []encodingTestGroup{
 
 	{"map",
 		[]encodingTestCase{
+			{map[string]bool(nil), "nil"},
+			{make(map[string]bool), "{}"},
+			{map[string]bool{"a": true, "b": false}, `{"a": true, "b": false}`},
+			{map[int]bool{1: true, 2: false}, `{1: true, 2: false}`},
+			// TODO: map with struct key
 		},
 	},
 

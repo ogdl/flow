@@ -43,6 +43,8 @@ func (dec *Decoder) decode(v reflect.Value) error {
 			return dec.decodeArray(v)
 		case reflect.Struct:
 			return dec.decodeStruct(v)
+		case reflect.Map:
+			return dec.decodeMap(v)
 		}
 	}
 
@@ -137,7 +139,7 @@ func (dec *Decoder) decodeComplex(v reflect.Value, val []byte) error {
 func (dec *Decoder) decodeString(v reflect.Value, val []byte) error {
 	s, err := strconv.Unquote(string(val))
 	if err != nil {
-		return err
+		s = string(val)
 	}
 	v.SetString(s)
 	return nil
@@ -149,45 +151,80 @@ func (dec *Decoder) decodeSlice(v reflect.Value) error {
 		return nil
 	}
 	i := -1
-	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+	return dec.decodeList(v, func() error {
 		i++
-		if i == list.Len() {
-			list.Set(reflect.Append(list, reflect.New(list.Type().Elem()).Elem()))
+		if i == v.Len() {
+			v.Set(reflect.Append(v, reflect.New(v.Type().Elem()).Elem()))
 		}
-		return list.Index(i), nil
+		elem := v.Index(i)
+		if err := dec.decode(elem); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
 func (dec *Decoder) decodeArray(v reflect.Value) error {
 	i := -1
-	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+	return dec.decodeList(v, func() error {
 		i++
-		if i < list.Len() {
-			return list.Index(i), nil
-		} else {
-			return reflect.Value{}, nil
+		elem := reflect.Value{}
+		if i < v.Len() {
+			elem = v.Index(i)
 		}
+		if err := dec.decode(elem); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
 func (dec *Decoder) decodeStruct(v reflect.Value) error {
-	return dec.decodeList(v, func(list reflect.Value) (reflect.Value, error) {
+	return dec.decodeList(v, func() error {
 		fieldName, err := dec.expectFieldName()
 		if err != nil {
-			return reflect.Value{}, err
+			return err
 		}
 		if err := dec.next(); err != nil {
-			return reflect.Value{}, err
+			return err
 		}
-		elemVal := reflect.Value{}
+		elem := reflect.Value{}
 		if field := v.FieldByName(fieldName); field.CanSet() {
-			elemVal = field
+			elem = field
 		}
-		return elemVal, nil
+		if err := dec.decode(elem); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
-func (dec *Decoder) decodeList(sv reflect.Value, getElemVal func(list reflect.Value) (reflect.Value, error)) error {
+func (dec *Decoder) decodeMap(v reflect.Value) error {
+	if err := dec.expectNil(); err == nil {
+		v.Set(reflect.Zero(v.Type()))
+		return nil
+	}
+	if v.IsNil() {
+		v.Set(reflect.MakeMap(v.Type()))
+	}
+	return dec.decodeList(v, func() error {
+		key := reflect.New(v.Type().Key()).Elem()
+		if err := dec.decode(key); err != nil {
+			return err
+		}
+		if err := dec.next(); err != nil {
+			return err
+		}
+		elem := reflect.New(v.Type().Elem()).Elem()
+		if err := dec.decode(elem); err != nil {
+			return err
+		}
+		v.SetMapIndex(key, elem)
+		return nil
+	})
+}
+
+func (dec *Decoder) decodeList(sv reflect.Value, decodeElem func() error) error {
 	if err := dec.expectListStart(); err != nil {
 		return err
 	}
@@ -202,11 +239,7 @@ func (dec *Decoder) decodeList(sv reflect.Value, getElemVal func(list reflect.Va
 		if !isElem {
 			break
 		}
-		elemVal, err := getElemVal(sv)
-		if err != nil {
-			return err
-		}
-		if err := dec.decode(elemVal); err != nil {
+		if err := decodeElem(); err != nil {
 			return err
 		}
 		if err := dec.next(); err != nil {
@@ -240,16 +273,16 @@ func (dec *Decoder) expectFieldName() (string, error) {
 		return "", dec.error()
 	}
 
-	if val[len(val)-1] == ':' {
-		val = val[:len(val)-1]
-	}
-
 	return strings.Title(string(val)), nil
 }
 
 func (dec *Decoder) expectValue() ([]byte, error) {
 	if dec.token.typ == tokenString {
-		return dec.token.val, nil
+		val := dec.token.val
+		if len(val) > 0 && val[len(val)-1] == ':' {
+			val = val[:len(val)-1]
+		}
+		return val, nil
 	}
 	return nil, dec.error()
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sort"
 	"strconv"
 )
 
@@ -52,10 +53,12 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		enc.encodeSlice(v)
 	case reflect.Struct:
 		enc.encodeStruct(v)
+	case reflect.Map:
+		enc.encodeMap(v)
 	case reflect.Ptr, reflect.Interface:
 		enc.encodeRef(v)
 	case reflect.Invalid, reflect.Chan, reflect.Func,
-		reflect.Map, reflect.UnsafePointer:
+		reflect.UnsafePointer:
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	default:
 		enc.WriteString(fmt.Sprint(v.Interface()))
@@ -63,17 +66,35 @@ func (enc *Encoder) encode(v reflect.Value) error {
 	return nil
 }
 
-// TODO:
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	enc.WriteByte('{')
 	t := v.Type()
 	for i := 0; i < t.NumField(); i++ {
+		if i > 0 {
+			enc.WriteString(", ")
+		}
 		enc.WriteString(t.Field(i).Name)
 		enc.WriteString(": ")
 		enc.encode(v.Field(i))
-		if i < t.NumField()-1 {
+	}
+	enc.WriteByte('}')
+}
+
+func (enc *Encoder) encodeMap(v reflect.Value) {
+	if v.IsNil() {
+		enc.encodeNil()
+		return
+	}
+	enc.WriteByte('{')
+	var sv stringValues = v.MapKeys()
+	sort.Sort(sv)
+	for i, k := range sv {
+		if i > 0 {
 			enc.WriteString(", ")
 		}
+		enc.encode(k)
+		enc.WriteString(": ")
+		enc.encode(v.MapIndex(k))
 	}
 	enc.WriteByte('}')
 }
@@ -129,3 +150,12 @@ func (enc *Encoder) encodeArray(v reflect.Value) {
 func (enc *Encoder) EncodeValue(value reflect.Value) error {
 	return nil
 }
+
+// stringValues is a slice of reflect.Value holding *reflect.StringValue.
+// It implements the methods to sort by string.
+type stringValues []reflect.Value
+
+func (sv stringValues) Len() int           { return len(sv) }
+func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
+func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
+func (sv stringValues) get(i int) string   { return sv[i].String() }
