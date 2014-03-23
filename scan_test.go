@@ -5,11 +5,15 @@
 package flow
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
+	"strings"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
+	"github.com/hailiang/gspec/core"
 	"github.com/hailiang/gspec/errors"
+	exp "github.com/hailiang/gspec/expectation"
 	"github.com/hailiang/gspec/suite"
 )
 
@@ -128,6 +132,28 @@ var testCases = []testCase{
 	},
 }
 
+var _ = suite.Add(func(s core.S) {
+	describe, testcase := s.Alias("describe"), s.Alias("testcase")
+	expect := exp.Alias(s.Fail)
+
+	describe("flow.scanner", func() {
+		for _, tc := range testCases {
+			testcase(fmt.Sprint(tc), func() {
+				s := newScanner(strings.NewReader(tc.text))
+				tokens := s.scanAll()
+				expect(tokens).Equal(tc.tokens)
+			})
+		}
+	})
+})
+
+func (s *scanner) scanAll() (tokens []*token) {
+	for s.scan() {
+		tokens = append(tokens, s.token)
+	}
+	return
+}
+
 func TestAll(t *testing.T) {
 	suite.Run(t, false)
 }
@@ -137,10 +163,22 @@ func p(v ...interface{}) {
 }
 
 func init() {
-	errors.Sprint = dumpPrint
+	errors.Sprint = flowPrint
+//	errors.Sprint = jsonPrint
+	//errors.Sprint = dumpPrint
+}
+
+func flowPrint(v interface{}) string {
+	buf, _ := MarshalIndent(v, "    ", "    ")
+	return "\n    " + string(buf) + "\n"
 }
 
 func dumpPrint(v interface{}) string {
 	spew.Config.Indent = "    "
 	return "\n" + spew.Sdump(v)
+}
+
+func jsonPrint(v interface{}) string {
+	buf, _ := json.MarshalIndent(v, "    ", "  ")
+	return "\n    " + string(buf) + "\n"
 }

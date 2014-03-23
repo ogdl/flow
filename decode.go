@@ -32,7 +32,7 @@ func (dec *Decoder) Decode(e interface{}) error {
 
 func (dec *Decoder) decode(v reflect.Value) error {
 	if !v.CanSet() && v.Kind() != reflect.Ptr { // interface should also be allowed.
-		return fmt.Errorf("unsetable nonpointer value: %v, %v", v)
+		return fmt.Errorf("unsetable nonpointer value: %v", v)
 	}
 	if v.Kind() == reflect.Ptr {
 		v = deref(v).Elem()
@@ -343,9 +343,6 @@ type DecodeValueError struct {
 func (e *DecodeValueError) Error() string {
 	return "ogdl: cannot unmarshal " + strconv.Quote(e.Value) + " into Go value of type " + e.Type.String()
 }
-
-// TODO:
-// Improve panic message of gspec!!!
 
 func deref(v reflect.Value) reflect.Value {
 	if isRef(v) {

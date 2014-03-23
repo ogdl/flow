@@ -13,6 +13,28 @@ import (
 	"strconv"
 )
 
+func Marshal(v interface{}) ([]byte, error) {
+	enc := NewEncoder(nil)
+	if err := enc.marshal(v); err != nil {
+		return nil, err
+	}
+	return enc.Bytes(), nil
+}
+
+// MarshalIndent is like Marshal but applies Indent to format the output.
+func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
+	b, err := Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	var buf bytes.Buffer
+	err = Indent(&buf, b, prefix, indent)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
 type bytesBuffer struct {
 	bytes.Buffer
 }
@@ -26,8 +48,15 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{w: w}
 }
 
-func (enc *Encoder) Encode(v interface{}) error {
+func (enc *Encoder) marshal(v interface{}) error {
 	if err := enc.encode(reflect.ValueOf(v)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (enc *Encoder) Encode(v interface{}) error {
+	if err := enc.marshal(v); err != nil {
 		return err
 	}
 	_, err := enc.w.Write(enc.Bytes())
@@ -41,6 +70,10 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		return nil
 	}
 	switch v.Kind() {
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+		enc.encodeInt(v)
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
+		enc.encodeUint(v)
 	case reflect.Complex64:
 		enc.encodeComplex(v, 32)
 	case reflect.Complex128:
@@ -61,9 +94,21 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		reflect.UnsafePointer:
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	default:
-		enc.WriteString(fmt.Sprint(v.Interface()))
+		if v.CanInterface() {
+			enc.WriteString(fmt.Sprint(v.Interface()))
+		} else {
+			enc.WriteString(v.String())
+		}
 	}
 	return nil
+}
+
+func (enc *Encoder) encodeInt(v reflect.Value) {
+	enc.WriteString(strconv.FormatInt(v.Int(), 10))
+}
+
+func (enc *Encoder) encodeUint(v reflect.Value) {
+	enc.WriteString(strconv.FormatUint(v.Uint(), 10))
 }
 
 func (enc *Encoder) encodeStruct(v reflect.Value) {

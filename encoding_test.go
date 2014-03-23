@@ -147,14 +147,15 @@ var encodingTestGroups = []encodingTestGroup{
 }
 
 var _ = suite.Add(func(s core.S) {
-	describe, decoding, testcase := s.Alias("describe"), s.Alias("decoding"), s.Alias("testcase")
+	describe, decoding, encoding, testcase :=
+		s.Alias("describe"), s.Alias("decoding"), s.Alias("encoding"), s.Alias("testcase")
 	expect := exp.Alias(s.Fail)
 
 	describe("Encoder", func() {
 		var buf bytes.Buffer
 		enc := NewEncoder(&buf)
 		for _, tg := range encodingTestGroups {
-			describe(tg.desc, func() {
+			encoding(tg.desc, func() {
 				for _, tc := range tg.cases {
 					testcase(fmt.Sprint(tc), func() {
 						err := enc.Encode(tc.value)
