@@ -86,27 +86,17 @@ var testCases = []testCase{
 		},
 	},
 	{
-		"`a`",
-		[]*token{
-			{tokenString, 0, []byte("`a`")},
-		},
-	},
-	{
 		"a:",
 		[]*token{
-			{tokenString, 0, []byte("a:")},
-		},
-	},
-	{
-		"`a`:",
-		[]*token{
-			{tokenString, 0, []byte("`a`:")},
+			{tokenString, 0, []byte("a")},
+			{tokenString, 1, []byte(":")},
 		},
 	},
 	{
 		`"a":`,
 		[]*token{
-			{tokenString, 0, []byte(`"a":`)},
+			{tokenString, 0, []byte(`"a"`)},
+			{tokenString, 3, []byte(`:`)},
 		},
 	},
 	{
@@ -114,7 +104,8 @@ var testCases = []testCase{
 		[]*token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
-			{tokenRightBrace, 2, []byte("}:")},
+			{tokenRightBrace, 2, []byte("}")},
+			{tokenString, 3, []byte(":")},
 		},
 	},
 	{
@@ -164,13 +155,13 @@ func p(v ...interface{}) {
 
 func init() {
 	errors.Sprint = flowPrint
-//	errors.Sprint = jsonPrint
+	//	errors.Sprint = jsonPrint
 	//errors.Sprint = dumpPrint
 }
 
 func flowPrint(v interface{}) string {
 	buf, _ := MarshalIndent(v, "    ", "    ")
-	return "\n    " + string(buf) + "\n"
+	return "\n" + string(buf) + "\n"
 }
 
 func dumpPrint(v interface{}) string {

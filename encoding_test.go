@@ -23,7 +23,7 @@ type structKey struct {
 }
 
 type encodingTestGroup struct {
-	desc  string
+	typ   string
 	cases []encodingTestCase
 }
 
@@ -146,6 +146,41 @@ var encodingTestGroups = []encodingTestGroup{
 	},
 }
 
+var marshalIndentTestGroups = []encodingTestGroup{
+	{"slice",
+		[]encodingTestCase{
+			{[]int(nil), " nil"},
+			{[]int{1, 2}, " {\n   1,\n   2,\n }"},
+		},
+	},
+
+	{"array",
+		[]encodingTestCase{
+			{[...]int{1, 2}, " {\n   1,\n   2,\n }"},
+		},
+	},
+
+	{"struct",
+		[]encodingTestCase{
+			{struct{}{}, " {}"},
+			{struct {
+				IVal int
+				SVal string
+			}{IVal: 1, SVal: "a"}, " {\n   IVal: 1,\n   SVal: \"a\",\n }"},
+		},
+	},
+
+	{"map",
+		[]encodingTestCase{
+			{map[string]bool(nil), " nil"},
+			{make(map[string]bool), " {}"},
+			{map[int]bool{1: true, 2: false}, " {\n   1: true,\n   2: false,\n }"},
+			{map[structKey]bool{structKey{1, "a"}: true, structKey{2, "b"}: false},
+				" {\n   {IKey: 1, SKey: \"a\"}: true,\n   {IKey: 2, SKey: \"b\"}: false,\n }"},
+		},
+	},
+}
+
 var _ = suite.Add(func(s core.S) {
 	describe, decoding, encoding, testcase :=
 		s.Alias("describe"), s.Alias("decoding"), s.Alias("encoding"), s.Alias("testcase")
@@ -155,7 +190,7 @@ var _ = suite.Add(func(s core.S) {
 		var buf bytes.Buffer
 		enc := NewEncoder(&buf)
 		for _, tg := range encodingTestGroups {
-			encoding(tg.desc, func() {
+			encoding(tg.typ, func() {
 				for _, tc := range tg.cases {
 					testcase(fmt.Sprint(tc), func() {
 						err := enc.Encode(tc.value)
@@ -165,11 +200,22 @@ var _ = suite.Add(func(s core.S) {
 				}
 			})
 		}
+		for _, tg := range marshalIndentTestGroups {
+			encoding(tg.typ+" with indent", func() {
+				for _, tc := range tg.cases {
+					testcase(fmt.Sprint(tc), func() {
+						r, err := MarshalIndent(tc.value, " ", "  ")
+						expect(err).Equal(nil)
+						expect(string(r)).Equal(tc.text)
+					})
+				}
+			})
+		}
 	})
 
 	describe("Decoder", func() {
 		for _, tg := range encodingTestGroups {
-			decoding(tg.desc, func() {
+			decoding(tg.typ, func() {
 				for _, tc := range tg.cases {
 					testcase(fmt.Sprint(tc), func() {
 						dec := NewDecoder(strings.NewReader(tc.text))

@@ -23,16 +23,11 @@ func Marshal(v interface{}) ([]byte, error) {
 
 // MarshalIndent is like Marshal but applies Indent to format the output.
 func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
-	b, err := Marshal(v)
-	if err != nil {
+	enc := NewEncoder(nil)
+	if err := enc.marshalIndent(v, prefix, indent); err != nil {
 		return nil, err
 	}
-	var buf bytes.Buffer
-	err = Indent(&buf, b, prefix, indent)
-	if err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
+	return enc.Bytes(), nil
 }
 
 type bytesBuffer struct {
@@ -42,6 +37,10 @@ type bytesBuffer struct {
 type Encoder struct {
 	w io.Writer
 	bytesBuffer
+	indentMode bool
+	prefix     string
+	indent     string
+	depth      int
 }
 
 func NewEncoder(w io.Writer) *Encoder {
@@ -53,6 +52,18 @@ func (enc *Encoder) marshal(v interface{}) error {
 		return err
 	}
 	return nil
+}
+
+func (enc *Encoder) marshalIndent(v interface{}, prefix, indent string) error {
+	enc.indentMode = true
+	defer func() {
+		enc.indentMode = false
+	}()
+	enc.prefix = prefix
+	enc.indent = indent
+	enc.depth = 0
+	enc.WriteString(prefix)
+	return enc.marshal(v)
 }
 
 func (enc *Encoder) Encode(v interface{}) error {
@@ -70,10 +81,16 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		return nil
 	}
 	switch v.Kind() {
+	case reflect.Bool:
+		enc.encodeBool(v)
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
 		enc.encodeInt(v)
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 		enc.encodeUint(v)
+	case reflect.Float32:
+		enc.encodeFloat(v, 32)
+	case reflect.Float64:
+		enc.encodeFloat(v, 64)
 	case reflect.Complex64:
 		enc.encodeComplex(v, 32)
 	case reflect.Complex128:
@@ -90,17 +107,15 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		enc.encodeMap(v)
 	case reflect.Ptr, reflect.Interface:
 		enc.encodeRef(v)
-	case reflect.Invalid, reflect.Chan, reflect.Func,
-		reflect.UnsafePointer:
-		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	default:
-		if v.CanInterface() {
-			enc.WriteString(fmt.Sprint(v.Interface()))
-		} else {
-			enc.WriteString(v.String())
-		}
+		// case reflect.Invalid, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	}
 	return nil
+}
+
+func (enc *Encoder) encodeBool(v reflect.Value) {
+	enc.WriteString(strconv.FormatBool(v.Bool()))
 }
 
 func (enc *Encoder) encodeInt(v reflect.Value) {
@@ -111,18 +126,70 @@ func (enc *Encoder) encodeUint(v reflect.Value) {
 	enc.WriteString(strconv.FormatUint(v.Uint(), 10))
 }
 
+func (enc *Encoder) encodeFloat(v reflect.Value, bit int) {
+	enc.WriteString(strconv.FormatFloat(v.Float(), 'g', -1, bit))
+}
+
+func (enc *Encoder) newLine() {
+	enc.WriteByte('\n')
+	enc.WriteString(enc.prefix)
+	for i := 0; i < enc.depth; i++ {
+		enc.WriteString(enc.indent)
+	}
+}
+
 func (enc *Encoder) encodeStruct(v reflect.Value) {
-	enc.WriteByte('{')
 	t := v.Type()
+	enc.listStart(t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		if i > 0 {
-			enc.WriteString(", ")
+			enc.listSep()
 		}
 		enc.WriteString(t.Field(i).Name)
 		enc.WriteString(": ")
 		enc.encode(v.Field(i))
 	}
+	enc.listEnd(t.NumField())
+}
+
+func (enc *Encoder) listStart(count int) {
+	enc.WriteByte('{')
+	if enc.indentMode {
+		if count > 0 {
+			enc.depth++
+			enc.newLine()
+		}
+	}
+}
+
+func (enc *Encoder) listSep() {
+	if enc.indentMode {
+		enc.WriteByte(',')
+		enc.newLine()
+	} else {
+		enc.WriteString(", ")
+	}
+}
+
+func (enc *Encoder) listEnd(count int) {
+	if enc.indentMode {
+		if count > 0 {
+			enc.depth--
+			enc.WriteByte(',')
+			enc.newLine()
+		}
+	}
 	enc.WriteByte('}')
+}
+
+func (enc *Encoder) encodeKey(v reflect.Value) {
+	m := enc.indentMode
+	enc.indentMode = false
+	defer func() {
+		enc.indentMode = m
+	}()
+
+	enc.encode(v)
 }
 
 func (enc *Encoder) encodeMap(v reflect.Value) {
@@ -130,18 +197,18 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	enc.WriteByte('{')
+	enc.listStart(v.Len())
 	var sv stringValues = v.MapKeys()
 	sort.Sort(sv)
 	for i, k := range sv {
 		if i > 0 {
-			enc.WriteString(", ")
+			enc.listSep()
 		}
-		enc.encode(k)
+		enc.encodeKey(k)
 		enc.WriteString(": ")
 		enc.encode(v.MapIndex(k))
 	}
-	enc.WriteByte('}')
+	enc.listEnd(v.Len())
 }
 
 func (enc *Encoder) encodeNil() {
@@ -182,14 +249,14 @@ func (enc *Encoder) encodeSlice(v reflect.Value) {
 }
 
 func (enc *Encoder) encodeArray(v reflect.Value) {
-	enc.WriteByte('{')
+	enc.listStart(v.Len())
 	for i := 0; i < v.Len(); i++ {
 		if i > 0 {
-			enc.WriteString(", ")
+			enc.listSep()
 		}
 		enc.encode(v.Index(i))
 	}
-	enc.WriteByte('}')
+	enc.listEnd(v.Len())
 }
 
 func (enc *Encoder) EncodeValue(value reflect.Value) error {

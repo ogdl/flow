@@ -56,14 +56,14 @@ func (dec *Decoder) decode(v reflect.Value) error {
 	switch v.Kind() {
 	case reflect.Bool:
 		return dec.decodeBool(v, tokenVal)
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
 		return dec.decodeInt(v, tokenVal)
-	case reflect.Uint, reflect.Uintptr, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 		return dec.decodeUint(v, tokenVal)
 	case reflect.Float32:
-		return dec.decodeFloat32(v, tokenVal)
+		return dec.decodeFloat(v, tokenVal, 32)
 	case reflect.Float64:
-		return dec.decodeFloat64(v, tokenVal)
+		return dec.decodeFloat(v, tokenVal, 64)
 	case reflect.Complex64, reflect.Complex128:
 		return dec.decodeComplex(v, tokenVal)
 	case reflect.String:
@@ -106,18 +106,8 @@ func (dec *Decoder) decodeUint(v reflect.Value, val []byte) error {
 	return nil
 }
 
-func (dec *Decoder) decodeFloat32(v reflect.Value, val []byte) error {
-	f, err := strconv.ParseFloat(string(val), 32)
-	if err != nil {
-		return fmt.Errorf("unexpected float value: %s", strconv.Quote(string(val)))
-	}
-	// TODO: handle overflow
-	v.SetFloat(f)
-	return nil
-}
-
-func (dec *Decoder) decodeFloat64(v reflect.Value, val []byte) error {
-	f, err := strconv.ParseFloat(string(val), 64)
+func (dec *Decoder) decodeFloat(v reflect.Value, val []byte, bit int) error {
+	f, err := strconv.ParseFloat(string(val), bit)
 	if err != nil {
 		return fmt.Errorf("unexpected float value: %s", strconv.Quote(string(val)))
 	}
@@ -185,12 +175,15 @@ func (dec *Decoder) decodeStruct(v reflect.Value) error {
 		if err != nil {
 			return err
 		}
-		if err := dec.next(); err != nil {
-			return err
-		}
 		elem := reflect.Value{}
 		if field := v.FieldByName(fieldName); field.CanSet() {
 			elem = field
+		}
+		if err := dec.next(); err != nil {
+			return err
+		}
+		if err := dec.skipColon(); err != nil {
+			return err
 		}
 		if err := dec.decode(elem); err != nil {
 			return err
@@ -212,10 +205,13 @@ func (dec *Decoder) decodeMap(v reflect.Value) error {
 		if err := dec.decode(key); err != nil {
 			return err
 		}
+		elem := reflect.New(v.Type().Elem()).Elem()
 		if err := dec.next(); err != nil {
 			return err
 		}
-		elem := reflect.New(v.Type().Elem()).Elem()
+		if err := dec.skipColon(); err != nil {
+			return err
+		}
 		if err := dec.decode(elem); err != nil {
 			return err
 		}
@@ -263,6 +259,13 @@ func (dec *Decoder) next() error {
 	return dec.err
 }
 
+func (dec *Decoder) skipColon() error {
+	if dec.token.typ == tokenString && string(dec.token.val) == ":" {
+		return dec.next()
+	}
+	return nil
+}
+
 func (dec *Decoder) expectFieldName() (string, error) {
 	val, err := dec.expectValue()
 	if err != nil {
@@ -278,11 +281,7 @@ func (dec *Decoder) expectFieldName() (string, error) {
 
 func (dec *Decoder) expectValue() ([]byte, error) {
 	if dec.token.typ == tokenString {
-		val := dec.token.val
-		if len(val) > 0 && val[len(val)-1] == ':' {
-			val = val[:len(val)-1]
-		}
-		return val, nil
+		return dec.token.val, nil
 	}
 	return nil, dec.error()
 }

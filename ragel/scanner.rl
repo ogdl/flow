@@ -22,17 +22,17 @@
 #   raw_string         = '`' raw_char* '`';
     interpreted_char   = (char_inline - '"') | '\\"';
     interpreted_string = '"' interpreted_char* '"';
-    unquoted_char      = char_visible - char_delimiter;
-    unquoted_string    = unquoted_char+;
-#   string             = (raw_string | interpreted_string | unquoted_string) ':'?;
-    string             = (interpreted_string | unquoted_string) ':'?;
+    unquoted_char      = char_visible - (char_delimiter | ':');
+    unquoted_string    = unquoted_char+ | ':';
+#   string             = (raw_string | interpreted_string | unquoted_string);
+    string             = (interpreted_string | unquoted_string);
 
     main := |*
        char_invalid    => onInvalid;
        inline_comment  => onComment;
 #      general_comment => onComment;
        '{'             => onLeftBrace;
-       '}' ':'?        => onRightBrace;
+       '}'             => onRightBrace;
        ','             => onComma;
        string          => onString;
        char_space+;
