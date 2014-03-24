@@ -7,6 +7,7 @@ package flow
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -161,7 +162,14 @@ func init() {
 
 func flowPrint(v interface{}) string {
 	buf, _ := MarshalIndent(v, "    ", "    ")
-	return "\n" + string(buf) + "\n"
+	typ := ""
+	if v != nil {
+		typ = reflect.TypeOf(v).String() + "\n"
+	}
+	return "\n" +
+		typ +
+		string(buf) +
+		"\n"
 }
 
 func dumpPrint(v interface{}) string {

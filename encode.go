@@ -37,6 +37,7 @@ type bytesBuffer struct {
 type Encoder struct {
 	w io.Writer
 	bytesBuffer
+	cycleDetector
 	indentMode bool
 	prefix     string
 	indent     string
@@ -44,10 +45,13 @@ type Encoder struct {
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return &Encoder{w: w}
+	return &Encoder{
+		w:             w,
+		cycleDetector: newCycleDetector()}
 }
 
 func (enc *Encoder) marshal(v interface{}) error {
+	enc.populate(reflect.ValueOf(v))
 	if err := enc.encode(reflect.ValueOf(v)); err != nil {
 		return err
 	}
@@ -67,7 +71,17 @@ func (enc *Encoder) marshalIndent(v interface{}, prefix, indent string) error {
 }
 
 func (enc *Encoder) Encode(v interface{}) error {
-	if err := enc.marshal(v); err != nil {
+	rv, ok := v.(reflect.Value)
+	if !ok {
+		rv = reflect.ValueOf(v)
+	}
+	enc.populate(rv)
+	if enc.serial > 1 {
+		if rv.Kind() != reflect.Ptr && !rv.CanAddr() {
+			return fmt.Errorf("object with cyclic reference must be addressable, %v", v)
+		}
+	}
+	if err := enc.encode(rv); err != nil {
 		return err
 	}
 	_, err := enc.w.Write(enc.Bytes())
@@ -79,6 +93,14 @@ func (enc *Encoder) encode(v reflect.Value) error {
 	if !v.IsValid() {
 		enc.encodeNil()
 		return nil
+	}
+	if v.CanAddr() {
+		p := v.Addr().Pointer()
+		id := enc.getPtrID(p)
+		if id > 0 && !enc.n[p] {
+			enc.n[p] = true
+			enc.WriteString(fmt.Sprintf("^%d ", id))
+		}
 	}
 	switch v.Kind() {
 	case reflect.Bool:
@@ -105,8 +127,10 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		enc.encodeStruct(v)
 	case reflect.Map:
 		enc.encodeMap(v)
-	case reflect.Ptr, reflect.Interface:
-		enc.encodeRef(v)
+	case reflect.Ptr:
+		enc.encodePtr(v)
+	case reflect.Interface:
+		enc.encodeInterface(v)
 	default:
 		// case reflect.Invalid, reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
@@ -232,7 +256,27 @@ func (enc *Encoder) encodeString(v reflect.Value) {
 	)
 }
 
-func (enc *Encoder) encodeRef(v reflect.Value) {
+func (enc *Encoder) encodePtr(v reflect.Value) {
+	if v.IsNil() {
+		enc.encodeNil()
+		return
+	}
+	p := v.Pointer()
+	id := enc.getPtrID(p)
+	if id > 0 {
+		if enc.n[p] {
+			enc.WriteString(fmt.Sprintf("^%d", id))
+		} else {
+			enc.n[p] = true
+			enc.WriteString(fmt.Sprintf("^%d ", id))
+			enc.encode(v.Elem())
+		}
+	} else {
+		enc.encode(v.Elem())
+	}
+}
+
+func (enc *Encoder) encodeInterface(v reflect.Value) {
 	if v.IsNil() {
 		enc.encodeNil()
 		return
@@ -271,3 +315,52 @@ func (sv stringValues) Len() int           { return len(sv) }
 func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
 func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
 func (sv stringValues) get(i int) string   { return sv[i].String() }
+
+type cycleDetector struct {
+	m      map[uintptr]int
+	n      map[uintptr]bool
+	serial int
+}
+
+func newCycleDetector() cycleDetector {
+	return cycleDetector{make(map[uintptr]int), make(map[uintptr]bool), 1}
+}
+
+func (d *cycleDetector) getPtrID(p uintptr) int {
+	if id := d.m[p]; id > 0 {
+		return id
+	}
+	return 0
+}
+
+func (d *cycleDetector) add(addr uintptr) {
+	d.m[addr]--
+	if d.m[addr] == -2 {
+		d.m[addr] = d.serial
+		d.serial++
+	}
+}
+
+func (d *cycleDetector) populate(v reflect.Value) {
+	if v.CanAddr() {
+		d.add(v.Addr().Pointer())
+	}
+	switch v.Kind() {
+	case reflect.Ptr:
+		if d.m[v.Pointer()] == 0 {
+			d.populate(v.Elem())
+		}
+	case reflect.Array, reflect.Slice:
+		for i := 0; i < v.Len(); i++ {
+			d.populate(v.Index(i))
+		}
+	case reflect.Struct:
+		for i := 0; i < v.Type().NumField(); i++ {
+			d.populate(v.Field(i))
+		}
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			d.populate(v.MapIndex(k))
+		}
+	}
+}

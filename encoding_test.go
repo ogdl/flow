@@ -15,6 +15,16 @@ import (
 	"github.com/hailiang/gspec/suite"
 )
 
+type cycleStruct struct {
+	P *cycleStruct
+}
+
+var aCycleStruct = func() *cycleStruct {
+	a := &cycleStruct{}
+	a.P = a
+	return a
+}()
+
 type intSlice []int
 
 type structKey struct {
@@ -22,9 +32,29 @@ type structKey struct {
 	SKey string
 }
 
-type encodingTestGroup struct {
-	typ   string
-	cases []encodingTestCase
+func intPtr(i int) *int {
+	return &i
+}
+
+func intPtrPtr(i int) **int {
+	pi := intPtr(i)
+	return &pi
+}
+
+func intRefPtr(i int) interface{} {
+	return intPtr(i)
+}
+
+func inter(v interface{}) interface{} {
+	return v
+}
+
+func newValue(v interface{}) reflect.Value {
+	t := reflect.TypeOf(v)
+	if t == nil {
+		return reflect.ValueOf(nil)
+	}
+	return reflect.New(t)
 }
 
 type encodingTestCase struct {
@@ -32,8 +62,29 @@ type encodingTestCase struct {
 	text  string
 }
 
-var encodingTestGroups = []encodingTestGroup{
-	{"Untyped literals",
+type encodingTestGroup struct {
+	typ   string
+	cases []encodingTestCase
+}
+
+type encodingTestGroups []encodingTestGroup
+
+func (tgs encodingTestGroups) Test(desc string, s core.S, visit func(tc encodingTestCase)) {
+	testgroup, testcase := s.Alias(desc), s.Alias("testcase")
+	for _, tg := range tgs {
+		testgroup(tg.typ, func() {
+			for _, tc := range tg.cases {
+				testcase(fmt.Sprint(tc), func() {
+					visit(tc)
+				})
+			}
+		})
+	}
+
+}
+
+var _encodingTestGroups = encodingTestGroups{
+	{"untyped literals",
 		[]encodingTestCase{
 			{nil, "nil"},
 
@@ -144,9 +195,18 @@ var encodingTestGroups = []encodingTestGroup{
 	{"interface",
 		[]encodingTestCase{},
 	},
+
+	/*
+	{"cyclic references",
+		[]encodingTestCase{
+			{aCycleStruct, "^1 {P: ^1}"},
+			{reflect.ValueOf(aCycleStruct).Elem(), "^1 {P: ^1}"},
+		},
+	},
+	*/
 }
 
-var marshalIndentTestGroups = []encodingTestGroup{
+var marshalIndentTestGroups = encodingTestGroups{
 	{"slice",
 		[]encodingTestCase{
 			{[]int(nil), " nil"},
@@ -182,77 +242,33 @@ var marshalIndentTestGroups = []encodingTestGroup{
 }
 
 var _ = suite.Add(func(s core.S) {
-	describe, decoding, encoding, testcase :=
-		s.Alias("describe"), s.Alias("decoding"), s.Alias("encoding"), s.Alias("testcase")
+	describe := s.Alias("describe")
 	expect := exp.Alias(s.Fail)
 
 	describe("Encoder", func() {
 		var buf bytes.Buffer
 		enc := NewEncoder(&buf)
-		for _, tg := range encodingTestGroups {
-			encoding(tg.typ, func() {
-				for _, tc := range tg.cases {
-					testcase(fmt.Sprint(tc), func() {
-						err := enc.Encode(tc.value)
-						expect(err).Equal(nil)
-						expect(buf.String()).Equal(tc.text)
-					})
-				}
-			})
-		}
-		for _, tg := range marshalIndentTestGroups {
-			encoding(tg.typ+" with indent", func() {
-				for _, tc := range tg.cases {
-					testcase(fmt.Sprint(tc), func() {
-						r, err := MarshalIndent(tc.value, " ", "  ")
-						expect(err).Equal(nil)
-						expect(string(r)).Equal(tc.text)
-					})
-				}
-			})
-		}
+		_encodingTestGroups.Test("encoding", s, func(tc encodingTestCase) {
+			err := enc.Encode(tc.value)
+			expect(err).Equal(nil)
+			expect(buf.String()).Equal(tc.text)
+		})
+		marshalIndentTestGroups.Test("encoding and indenting", s, func(tc encodingTestCase) {
+			r, err := MarshalIndent(tc.value, " ", "  ")
+			expect(err).Equal(nil)
+			expect(string(r)).Equal(tc.text)
+		})
 	})
 
 	describe("Decoder", func() {
-		for _, tg := range encodingTestGroups {
-			decoding(tg.typ, func() {
-				for _, tc := range tg.cases {
-					testcase(fmt.Sprint(tc), func() {
-						dec := NewDecoder(strings.NewReader(tc.text))
-						nv := newValue(tc.value)
-						if nv.IsValid() {
-							err := dec.Decode(nv.Interface())
-							expect(err).Equal(nil)
-							expect(nv.Elem().Interface()).Equal(tc.value)
-						}
-					})
-				}
-			})
-		}
+		_encodingTestGroups.Test("decoding", s, func(tc encodingTestCase) {
+			dec := NewDecoder(strings.NewReader(tc.text))
+			nv := newValue(tc.value)
+			if nv.IsValid() {
+				err := dec.Decode(nv.Interface())
+				expect(err).Equal(nil)
+				expect(nv.Elem().Interface()).Equal(tc.value)
+			}
+		})
 	})
 })
-
-func intPtr(i int) *int {
-	return &i
-}
-
-func intPtrPtr(i int) **int {
-	pi := intPtr(i)
-	return &pi
-}
-
-func intRefPtr(i int) interface{} {
-	return intPtr(i)
-}
-
-func inter(v interface{}) interface{} {
-	return v
-}
-
-func newValue(v interface{}) reflect.Value {
-	t := reflect.TypeOf(v)
-	if t == nil {
-		return reflect.ValueOf(nil)
-	}
-	return reflect.New(t)
-}

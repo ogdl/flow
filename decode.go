@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"reflect"
 	"strconv"
-	"strings"
 )
 
 type Decoder struct {
@@ -30,12 +29,25 @@ func (dec *Decoder) Decode(e interface{}) error {
 	return dec.decode(reflect.ValueOf(e))
 }
 
-func (dec *Decoder) decode(v reflect.Value) error {
-	if !v.CanSet() && v.Kind() != reflect.Ptr { // interface should also be allowed.
+func (dec *Decoder) decode(v reflect.Value) (err error) {
+	defer func() {
+		if e := dec.next(); e != nil && e != io.EOF {
+			err = e
+		}
+	}()
+	if !v.CanSet() && v.Kind() != reflect.Ptr { // TODO: interface should also be allowed.
 		return fmt.Errorf("unsetable nonpointer value: %v", v)
 	}
 	if v.Kind() == reflect.Ptr {
 		v = deref(v).Elem()
+	}
+	if dec.token.typ == tokenString && len(dec.token.val) > 0 && dec.token.val[0] == '^' {
+		if err := dec.next(); err != nil {
+			return err
+		}
+		if err := dec.expectElemSepOrListEnd(); err == nil {
+			return nil
+		}
 	}
 	switch v.Kind() {
 	case reflect.Slice:
@@ -238,9 +250,6 @@ func (dec *Decoder) decodeList(sv reflect.Value, decodeElem func() error) error 
 		if err := decodeElem(); err != nil {
 			return err
 		}
-		if err := dec.next(); err != nil {
-			return err
-		}
 		if err := dec.expectElemSepOrListEnd(); err != nil {
 			return err
 		}
@@ -276,7 +285,7 @@ func (dec *Decoder) expectFieldName() (string, error) {
 		return "", dec.error()
 	}
 
-	return strings.Title(string(val)), nil
+	return string(val), nil
 }
 
 func (dec *Decoder) expectValue() ([]byte, error) {
