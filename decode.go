@@ -14,13 +14,13 @@ import (
 
 type Decoder struct {
 	*scanner
-	m map[string]refValue
+	refSetter
 }
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		scanner: newScanner(r),
-		m:       make(map[string]refValue),
+		newScanner(r),
+		newRefSetter(),
 	}
 }
 
@@ -32,15 +32,10 @@ func (dec *Decoder) Decode(v interface{}) error {
 	if err := dec.next(); err != nil {
 		return err
 	}
-	err := dec.decode(rv)
-	if err != nil {
+	if err := dec.decode(rv); err != nil {
 		return err
 	}
-	for _, refVal := range dec.m {
-		for _, dst := range refVal.dst {
-			dst.Set(refVal.src)
-		}
-	}
+	dec.setAllRef()
 	return nil
 }
 
@@ -51,22 +46,19 @@ func (dec *Decoder) decode(v reflect.Value) (err error) {
 	if v.Kind() == reflect.Ptr {
 		v = deref(v).Elem()
 	}
-	if dec.token.typ == tokenString && len(dec.token.val) > 0 && dec.token.val[0] == '^' {
+	if dec.isRef() {
 		id := string(dec.token.val[1:])
 		if err := dec.next(); err != nil {
 			return err
 		}
-		if err := dec.expectElemSepOrListEnd(); err == nil { // pure ref
-			refVal := dec.m[id]
-			refVal.dst = append(refVal.dst, v)
-			dec.m[id] = refVal
+		if dec.isSepOrListEnd() {
+			dec.addDstRef(id, v)
 			return nil
 		} else {
-			refVal := dec.m[id]
-			refVal.src = v
-			dec.m[id] = refVal
+			dec.addSrcRef(id, v)
 		}
 	}
+
 	defer func() {
 		if e := dec.next(); e != nil && e != io.EOF {
 			err = e
@@ -171,7 +163,7 @@ func (dec *Decoder) decodeString(v reflect.Value, val []byte) error {
 }
 
 func (dec *Decoder) decodeSlice(v reflect.Value) error {
-	if err := dec.expectNil(); err == nil {
+	if dec.isNil() {
 		v.Set(reflect.Zero(v.Type()))
 		return nil
 	}
@@ -228,7 +220,7 @@ func (dec *Decoder) decodeStruct(v reflect.Value) error {
 }
 
 func (dec *Decoder) decodeMap(v reflect.Value) error {
-	if err := dec.expectNil(); err == nil {
+	if dec.isNil() {
 		v.Set(reflect.Zero(v.Type()))
 		return nil
 	}
@@ -256,25 +248,25 @@ func (dec *Decoder) decodeMap(v reflect.Value) error {
 }
 
 func (dec *Decoder) decodeList(sv reflect.Value, decodeElem func() error) error {
-	if err := dec.expectListStart(); err != nil {
-		return err
+	if !dec.isListStart() {
+		return dec.error()
 	}
 	if err := dec.next(); err != nil {
 		return err
 	}
 	for {
-		isElem, err := dec.expectListEndOrElem()
-		if err != nil {
-			return err
-		}
-		if !isElem {
+		if dec.isListEnd() {
 			break
 		}
 		if err := decodeElem(); err != nil {
 			return err
 		}
-		if err := dec.expectElemSepOrListEnd(); err != nil {
-			return err
+		if dec.isSep() {
+			if err := dec.next(); err != nil {
+				return err
+			}
+		} else if !dec.isListEnd() {
+			return dec.error()
 		}
 	}
 	return nil
@@ -304,10 +296,6 @@ func (dec *Decoder) expectFieldName() (string, error) {
 		return "", err
 	}
 
-	if len(val) == 0 {
-		return "", dec.error()
-	}
-
 	return string(val), nil
 }
 
@@ -318,46 +306,28 @@ func (dec *Decoder) expectValue() ([]byte, error) {
 	return nil, dec.error()
 }
 
-func (dec *Decoder) expectListStart() error {
-	if dec.token.typ == tokenLeftBrace {
-		return nil
-	}
-	return dec.error()
+func (dec *Decoder) isRef() bool {
+	return dec.token.typ == tokenString && len(dec.token.val) > 0 && dec.token.val[0] == '^'
 }
 
-func (dec *Decoder) expectNil() error {
-	if dec.token.typ == tokenString && string(dec.token.val) == "nil" {
-		return nil
-	}
-	return dec.error()
+func (dec *Decoder) isListStart() bool {
+	return dec.token.typ == tokenLeftBrace
 }
 
-func (dec *Decoder) expectNilOrListStart() (isNil bool, _ error) {
-	if err := dec.expectNil(); err == nil {
-		return true, nil
-	}
-	return false, dec.expectListStart()
+func (dec *Decoder) isNil() bool {
+	return dec.token.typ == tokenString && string(dec.token.val) == "nil"
 }
 
-func (dec *Decoder) expectListEndOrElem() (isElem bool, _ error) {
-	if dec.token.typ == tokenRightBrace {
-		return false, nil
-	} else {
-		return true, nil
-	}
-	return false, dec.error()
+func (dec *Decoder) isListEnd() bool {
+	return dec.token.typ == tokenRightBrace
 }
 
-func (dec *Decoder) expectElemSepOrListEnd() error {
-	if dec.token.typ == tokenComma {
-		if err := dec.next(); err != nil {
-			return err
-		}
-		return nil
-	} else if dec.token.typ == tokenRightBrace {
-		return nil
-	}
-	return dec.error()
+func (dec *Decoder) isSepOrListEnd() bool {
+	return dec.isSep() || dec.isListEnd()
+}
+
+func (dec *Decoder) isSep() bool {
+	return dec.token.typ == tokenComma
 }
 
 func (dec *Decoder) error() error {
@@ -400,4 +370,32 @@ func isRef(v reflect.Value) bool {
 type refValue struct {
 	src reflect.Value
 	dst []reflect.Value
+}
+
+type refSetter struct {
+	m map[string]refValue
+}
+
+func newRefSetter() refSetter {
+	return refSetter{make(map[string]refValue)}
+}
+
+func (s *refSetter) setAllRef() {
+	for _, refVal := range s.m {
+		for _, dst := range refVal.dst {
+			dst.Set(refVal.src)
+		}
+	}
+}
+
+func (s *refSetter) addSrcRef(id string, v reflect.Value) {
+	refVal := s.m[id]
+	refVal.src = v
+	s.m[id] = refVal
+}
+
+func (s *refSetter) addDstRef(id string, v reflect.Value) {
+	refVal := s.m[id]
+	refVal.dst = append(refVal.dst, v)
+	s.m[id] = refVal
 }

@@ -31,6 +31,12 @@ func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 	return enc.Bytes(), nil
 }
 
+type writer interface {
+	io.Writer
+	WriteByte(c byte) error
+	WriteString(s string) (n int, err error)
+}
+
 type bytesBuffer struct {
 	bytes.Buffer
 }
@@ -38,17 +44,14 @@ type bytesBuffer struct {
 type Encoder struct {
 	w io.Writer
 	bytesBuffer
-	cycleDetector
-	indentMode bool
-	prefix     string
-	indent     string
-	depth      int
+	refDetector
+	indenter
 }
 
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
-		w:             w,
-		cycleDetector: newCycleDetector()}
+		w:           w,
+		refDetector: newRefDetector()}
 }
 
 func (enc *Encoder) marshal(v interface{}) error {
@@ -60,14 +63,10 @@ func (enc *Encoder) marshal(v interface{}) error {
 }
 
 func (enc *Encoder) marshalIndent(v interface{}, prefix, indent string) error {
-	enc.indentMode = true
+	enc.indenter.start(enc, prefix, indent)
 	defer func() {
-		enc.indentMode = false
+		enc.indenter.stop()
 	}()
-	enc.prefix = prefix
-	enc.indent = indent
-	enc.depth = 0
-	enc.WriteString(prefix)
 	return enc.marshal(v)
 }
 
@@ -98,8 +97,8 @@ func (enc *Encoder) encode(v reflect.Value) error {
 	if v.CanAddr() {
 		addr := v.Addr().Pointer()
 		id := enc.getPtrID(addr)
-		if id > 0 && !enc.n[addr] {
-			enc.n[addr] = true
+		if id > 0 && !enc.m[addr].defined {
+			enc.define(addr)
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 		}
 	}
@@ -155,17 +154,9 @@ func (enc *Encoder) encodeFloat(v reflect.Value, bit int) {
 	enc.WriteString(strconv.FormatFloat(v.Float(), 'g', -1, bit))
 }
 
-func (enc *Encoder) newLine() {
-	enc.WriteByte('\n')
-	enc.WriteString(enc.prefix)
-	for i := 0; i < enc.depth; i++ {
-		enc.WriteString(enc.indent)
-	}
-}
-
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	t := v.Type()
-	enc.listStart(t.NumField())
+	enc.listStart(enc, t.NumField())
 	fieldNameMax := 0
 	for i := 0; i < t.NumField(); i++ {
 		l := len(t.Field(i).Name)
@@ -175,44 +166,14 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 	}
 	for i := 0; i < t.NumField(); i++ {
 		if i > 0 {
-			enc.listSep()
+			enc.listSep(enc)
 		}
 		fieldName := t.Field(i).Name
 		enc.WriteString(fieldName)
 		enc.WriteString(": " + strings.Repeat(" ", fieldNameMax-len(fieldName)))
 		enc.encode(v.Field(i))
 	}
-	enc.listEnd(t.NumField())
-}
-
-func (enc *Encoder) listStart(count int) {
-	enc.WriteByte('{')
-	if enc.indentMode {
-		if count > 0 {
-			enc.depth++
-			enc.newLine()
-		}
-	}
-}
-
-func (enc *Encoder) listSep() {
-	if enc.indentMode {
-		enc.WriteByte(',')
-		enc.newLine()
-	} else {
-		enc.WriteString(", ")
-	}
-}
-
-func (enc *Encoder) listEnd(count int) {
-	if enc.indentMode {
-		if count > 0 {
-			enc.depth--
-			enc.WriteByte(',')
-			enc.newLine()
-		}
-	}
-	enc.WriteByte('}')
+	enc.listEnd(enc, t.NumField())
 }
 
 func (enc *Encoder) encodeKey(v reflect.Value) {
@@ -230,18 +191,18 @@ func (enc *Encoder) encodeMap(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	enc.listStart(v.Len())
+	enc.listStart(enc, v.Len())
 	var sv stringValues = v.MapKeys()
 	sort.Sort(sv)
 	for i, k := range sv {
 		if i > 0 {
-			enc.listSep()
+			enc.listSep(enc)
 		}
 		enc.encodeKey(k)
 		enc.WriteString(": ")
 		enc.encode(v.MapIndex(k))
 	}
-	enc.listEnd(v.Len())
+	enc.listEnd(enc, v.Len())
 }
 
 func (enc *Encoder) encodeNil() {
@@ -273,10 +234,10 @@ func (enc *Encoder) encodePtr(v reflect.Value) {
 	addr := v.Pointer()
 	id := enc.getPtrID(addr)
 	if id > 0 {
-		if enc.n[addr] {
+		if enc.m[addr].defined {
 			enc.WriteString(fmt.Sprintf("^%d", id))
 		} else {
-			enc.n[addr] = true
+			enc.define(addr)
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 			enc.encode(v.Elem())
 		}
@@ -302,14 +263,14 @@ func (enc *Encoder) encodeSlice(v reflect.Value) {
 }
 
 func (enc *Encoder) encodeArray(v reflect.Value) {
-	enc.listStart(v.Len())
+	enc.listStart(enc, v.Len())
 	for i := 0; i < v.Len(); i++ {
 		if i > 0 {
-			enc.listSep()
+			enc.listSep(enc)
 		}
 		enc.encode(v.Index(i))
 	}
-	enc.listEnd(v.Len())
+	enc.listEnd(enc, v.Len())
 }
 
 func (enc *Encoder) EncodeValue(value reflect.Value) error {
@@ -325,36 +286,50 @@ func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
 func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
 func (sv stringValues) get(i int) string   { return sv[i].String() }
 
-type cycleDetector struct {
-	m      map[uintptr]int
-	n      map[uintptr]bool
+type refInfo struct {
+	id      int
+	defined bool
+}
+
+type refDetector struct {
+	m      map[uintptr]refInfo
 	serial int
 }
 
-func newCycleDetector() cycleDetector {
-	return cycleDetector{make(map[uintptr]int), make(map[uintptr]bool), 1}
+func newRefDetector() refDetector {
+	return refDetector{make(map[uintptr]refInfo), 1}
 }
 
-func (d *cycleDetector) getPtrID(addr uintptr) int {
-	if id := d.m[addr]; id > 0 {
-		return id
+func (d *refDetector) getPtrID(addr uintptr) int {
+	if ref := d.m[addr]; ref.id > 0 {
+		return ref.id
 	}
 	return 0
 }
 
-func (d *cycleDetector) add(addr uintptr) {
-	d.m[addr]--
-	if d.m[addr] == -2 {
-		d.m[addr] = d.serial
-		d.serial++
-	}
+func (d *refDetector) define(addr uintptr) {
+	ref := d.m[addr]
+	ref.defined = true
+	d.m[addr] = ref
 }
 
-func (d *cycleDetector) populate(v reflect.Value) {
+func (d *refDetector) add(addr uintptr) {
+	ref := d.m[addr]
+	switch ref.id {
+	case 0:
+		ref.id = -1
+	case -1:
+		ref.id = d.serial
+		d.serial++
+	}
+	d.m[addr] = ref
+}
+
+func (d *refDetector) populate(v reflect.Value) {
 	if v.Kind() != reflect.Ptr && v.CanAddr() {
 		addr := v.Addr().Pointer()
 		d.add(addr)
-		if d.m[addr] > 0 {
+		if d.m[addr].id > 0 {
 			return
 		}
 	}

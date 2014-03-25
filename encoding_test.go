@@ -193,10 +193,10 @@ var _encodingTestGroups = encodingTestGroups{
 				b.P = a
 				return a
 			}(), "^1 {P: {P: ^1}}"},
-			{func() *struct{ I, J *int } {
+			{func() *struct{ I, J, K *int } {
 				i := 42
-				return &struct{ I, J *int }{&i, &i}
-			}(), "{I: ^1 42, J: ^1}"},
+				return &struct{ I, J, K *int }{&i, &i, &i}
+			}(), "{I: ^1 42, J: ^1, K: ^1}"},
 		},
 	},
 }
