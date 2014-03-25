@@ -14,27 +14,37 @@ import (
 
 type Decoder struct {
 	*scanner
+	m map[string]refValue
 }
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
 		scanner: newScanner(r),
+		m:       make(map[string]refValue),
 	}
 }
 
-func (dec *Decoder) Decode(e interface{}) error {
+func (dec *Decoder) Decode(v interface{}) error {
+	rv, ok := v.(reflect.Value)
+	if !ok {
+		rv = reflect.ValueOf(v)
+	}
 	if err := dec.next(); err != nil {
 		return err
 	}
-	return dec.decode(reflect.ValueOf(e))
+	err := dec.decode(rv)
+	if err != nil {
+		return err
+	}
+	for _, refVal := range dec.m {
+		for _, dst := range refVal.dst {
+			dst.Set(refVal.src)
+		}
+	}
+	return nil
 }
 
 func (dec *Decoder) decode(v reflect.Value) (err error) {
-	defer func() {
-		if e := dec.next(); e != nil && e != io.EOF {
-			err = e
-		}
-	}()
 	if !v.CanSet() && v.Kind() != reflect.Ptr { // TODO: interface should also be allowed.
 		return fmt.Errorf("unsetable nonpointer value: %v", v)
 	}
@@ -42,13 +52,26 @@ func (dec *Decoder) decode(v reflect.Value) (err error) {
 		v = deref(v).Elem()
 	}
 	if dec.token.typ == tokenString && len(dec.token.val) > 0 && dec.token.val[0] == '^' {
+		id := string(dec.token.val[1:])
 		if err := dec.next(); err != nil {
 			return err
 		}
-		if err := dec.expectElemSepOrListEnd(); err == nil {
+		if err := dec.expectElemSepOrListEnd(); err == nil { // pure ref
+			refVal := dec.m[id]
+			refVal.dst = append(refVal.dst, v)
+			dec.m[id] = refVal
 			return nil
+		} else {
+			refVal := dec.m[id]
+			refVal.src = v
+			dec.m[id] = refVal
 		}
 	}
+	defer func() {
+		if e := dec.next(); e != nil && e != io.EOF {
+			err = e
+		}
+	}()
 	switch v.Kind() {
 	case reflect.Slice:
 		return dec.decodeSlice(v)
@@ -372,4 +395,9 @@ func isRef(v reflect.Value) bool {
 		return true
 	}
 	return false
+}
+
+type refValue struct {
+	src reflect.Value
+	dst []reflect.Value
 }

@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 func Marshal(v interface{}) ([]byte, error) {
@@ -95,10 +96,10 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		return nil
 	}
 	if v.CanAddr() {
-		p := v.Addr().Pointer()
-		id := enc.getPtrID(p)
-		if id > 0 && !enc.n[p] {
-			enc.n[p] = true
+		addr := v.Addr().Pointer()
+		id := enc.getPtrID(addr)
+		if id > 0 && !enc.n[addr] {
+			enc.n[addr] = true
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 		}
 	}
@@ -165,12 +166,20 @@ func (enc *Encoder) newLine() {
 func (enc *Encoder) encodeStruct(v reflect.Value) {
 	t := v.Type()
 	enc.listStart(t.NumField())
+	fieldNameMax := 0
+	for i := 0; i < t.NumField(); i++ {
+		l := len(t.Field(i).Name)
+		if l > fieldNameMax {
+			fieldNameMax = l
+		}
+	}
 	for i := 0; i < t.NumField(); i++ {
 		if i > 0 {
 			enc.listSep()
 		}
-		enc.WriteString(t.Field(i).Name)
-		enc.WriteString(": ")
+		fieldName := t.Field(i).Name
+		enc.WriteString(fieldName)
+		enc.WriteString(": " + strings.Repeat(" ", fieldNameMax-len(fieldName)))
 		enc.encode(v.Field(i))
 	}
 	enc.listEnd(t.NumField())
@@ -261,13 +270,13 @@ func (enc *Encoder) encodePtr(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	p := v.Pointer()
-	id := enc.getPtrID(p)
+	addr := v.Pointer()
+	id := enc.getPtrID(addr)
 	if id > 0 {
-		if enc.n[p] {
+		if enc.n[addr] {
 			enc.WriteString(fmt.Sprintf("^%d", id))
 		} else {
-			enc.n[p] = true
+			enc.n[addr] = true
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 			enc.encode(v.Elem())
 		}
@@ -326,8 +335,8 @@ func newCycleDetector() cycleDetector {
 	return cycleDetector{make(map[uintptr]int), make(map[uintptr]bool), 1}
 }
 
-func (d *cycleDetector) getPtrID(p uintptr) int {
-	if id := d.m[p]; id > 0 {
+func (d *cycleDetector) getPtrID(addr uintptr) int {
+	if id := d.m[addr]; id > 0 {
 		return id
 	}
 	return 0
@@ -342,14 +351,16 @@ func (d *cycleDetector) add(addr uintptr) {
 }
 
 func (d *cycleDetector) populate(v reflect.Value) {
-	if v.CanAddr() {
-		d.add(v.Addr().Pointer())
+	if v.Kind() != reflect.Ptr && v.CanAddr() {
+		addr := v.Addr().Pointer()
+		d.add(addr)
+		if d.m[addr] > 0 {
+			return
+		}
 	}
 	switch v.Kind() {
 	case reflect.Ptr:
-		if d.m[v.Pointer()] == 0 {
-			d.populate(v.Elem())
-		}
+		d.populate(v.Elem())
 	case reflect.Array, reflect.Slice:
 		for i := 0; i < v.Len(); i++ {
 			d.populate(v.Index(i))

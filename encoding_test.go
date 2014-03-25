@@ -15,38 +15,15 @@ import (
 	"github.com/hailiang/gspec/suite"
 )
 
-type cycleStruct struct {
-	P *cycleStruct
+type cyclicStruct struct {
+	P *cyclicStruct
 }
-
-var aCycleStruct = func() *cycleStruct {
-	a := &cycleStruct{}
-	a.P = a
-	return a
-}()
 
 type intSlice []int
 
 type structKey struct {
 	IKey int
 	SKey string
-}
-
-func intPtr(i int) *int {
-	return &i
-}
-
-func intPtrPtr(i int) **int {
-	pi := intPtr(i)
-	return &pi
-}
-
-func intRefPtr(i int) interface{} {
-	return intPtr(i)
-}
-
-func inter(v interface{}) interface{} {
-	return v
 }
 
 func newValue(v interface{}) reflect.Value {
@@ -186,9 +163,15 @@ var _encodingTestGroups = encodingTestGroups{
 
 	{"pointer",
 		[]encodingTestCase{
-			{intPtr(1), "1"},
-			{intPtrPtr(2), "2"},
-			{intRefPtr(3), "3"},
+			{func() *int {
+				i := 1
+				return &i
+			}(), "1"},
+			{func() **int {
+				i := 2
+				pi := &i
+				return &pi
+			}(), "2"},
 		},
 	},
 
@@ -196,14 +179,26 @@ var _encodingTestGroups = encodingTestGroups{
 		[]encodingTestCase{},
 	},
 
-	/*
 	{"cyclic references",
 		[]encodingTestCase{
-			{aCycleStruct, "^1 {P: ^1}"},
-			{reflect.ValueOf(aCycleStruct).Elem(), "^1 {P: ^1}"},
+			{func() *cyclicStruct {
+				a := &cyclicStruct{}
+				a.P = a
+				return a
+			}(), "^1 {P: ^1}"},
+			{func() *cyclicStruct {
+				a := &cyclicStruct{}
+				b := &cyclicStruct{}
+				a.P = b
+				b.P = a
+				return a
+			}(), "^1 {P: {P: ^1}}"},
+			{func() *struct{ I, J *int } {
+				i := 42
+				return &struct{ I, J *int }{&i, &i}
+			}(), "{I: ^1 42, J: ^1}"},
 		},
 	},
-	*/
 }
 
 var marshalIndentTestGroups = encodingTestGroups{
@@ -235,8 +230,13 @@ var marshalIndentTestGroups = encodingTestGroups{
 			{map[string]bool(nil), " nil"},
 			{make(map[string]bool), " {}"},
 			{map[int]bool{1: true, 2: false}, " {\n   1: true,\n   2: false,\n }"},
-			{map[structKey]bool{structKey{1, "a"}: true, structKey{2, "b"}: false},
-				" {\n   {IKey: 1, SKey: \"a\"}: true,\n   {IKey: 2, SKey: \"b\"}: false,\n }"},
+			{
+				map[structKey]bool{
+					structKey{1, "a"}: true,
+					structKey{2, "b"}: false,
+				},
+				" {\n   {IKey: 1, SKey: \"a\"}: true,\n   {IKey: 2, SKey: \"b\"}: false,\n }",
+			},
 		},
 	},
 }
