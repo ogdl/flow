@@ -10,7 +10,6 @@ import (
 	"io"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -34,7 +33,7 @@ func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 type writer interface {
 	io.Writer
 	WriteByte(c byte) error
-	WriteString(s string) (n int, err error)
+	WriteString(s string) error
 }
 
 type bytesBuffer struct {
@@ -52,6 +51,11 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		w:           w,
 		refDetector: newRefDetector()}
+}
+
+func (enc *Encoder) WriteString(s string) error {
+	_, err := enc.bytesBuffer.WriteString(s)
+	return err
 }
 
 func (enc *Encoder) marshal(v interface{}) error {
@@ -102,23 +106,14 @@ func (enc *Encoder) encode(v reflect.Value) error {
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 		}
 	}
+	if encoding, ok := typeToValueEncoding[v.Type()]; ok {
+		if encoding.Encode != nil {
+			return encoding.Encode(v, enc)
+		}
+	} else {
+		// TODO: unexpected type
+	}
 	switch v.Kind() {
-	case reflect.Bool:
-		enc.encodeBool(v)
-	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
-		enc.encodeInt(v)
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
-		enc.encodeUint(v)
-	case reflect.Float32:
-		enc.encodeFloat(v, 32)
-	case reflect.Float64:
-		enc.encodeFloat(v, 64)
-	case reflect.Complex64:
-		enc.encodeComplex(v, 32)
-	case reflect.Complex128:
-		enc.encodeComplex(v, 64)
-	case reflect.String:
-		enc.encodeString(v)
 	case reflect.Array:
 		enc.encodeArray(v)
 	case reflect.Slice:
@@ -136,22 +131,6 @@ func (enc *Encoder) encode(v reflect.Value) error {
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	}
 	return nil
-}
-
-func (enc *Encoder) encodeBool(v reflect.Value) {
-	enc.WriteString(strconv.FormatBool(v.Bool()))
-}
-
-func (enc *Encoder) encodeInt(v reflect.Value) {
-	enc.WriteString(strconv.FormatInt(v.Int(), 10))
-}
-
-func (enc *Encoder) encodeUint(v reflect.Value) {
-	enc.WriteString(strconv.FormatUint(v.Uint(), 10))
-}
-
-func (enc *Encoder) encodeFloat(v reflect.Value, bit int) {
-	enc.WriteString(strconv.FormatFloat(v.Float(), 'g', -1, bit))
 }
 
 func (enc *Encoder) encodeStruct(v reflect.Value) {
@@ -209,23 +188,6 @@ func (enc *Encoder) encodeNil() {
 	enc.WriteString("nil")
 }
 
-func (enc *Encoder) encodeComplex(v reflect.Value, bitSize int) {
-	c := v.Complex()
-	r, i := real(c), imag(c)
-	enc.WriteString(strconv.FormatFloat(r, 'g', -1, bitSize))
-	if i >= 0 {
-		enc.WriteByte('+')
-	}
-	enc.WriteString(strconv.FormatFloat(i, 'g', -1, bitSize))
-	enc.WriteByte('i')
-}
-
-func (enc *Encoder) encodeString(v reflect.Value) {
-	enc.WriteString(
-		strconv.Quote(v.String()),
-	)
-}
-
 func (enc *Encoder) encodePtr(v reflect.Value) {
 	if v.IsNil() {
 		enc.encodeNil()
@@ -277,8 +239,6 @@ func (enc *Encoder) EncodeValue(value reflect.Value) error {
 	return nil
 }
 
-// stringValues is a slice of reflect.Value holding *reflect.StringValue.
-// It implements the methods to sort by string.
 type stringValues []reflect.Value
 
 func (sv stringValues) Len() int           { return len(sv) }

@@ -7,7 +7,6 @@ package flow
 import (
 	"fmt"
 	"io"
-	"math/big"
 	"reflect"
 	"strconv"
 )
@@ -80,85 +79,11 @@ func (dec *Decoder) decode(v reflect.Value) (err error) {
 	if err != nil {
 		return err
 	}
-	switch v.Kind() {
-	case reflect.Bool:
-		return dec.decodeBool(v, tokenVal)
-	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
-		return dec.decodeInt(v, tokenVal)
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
-		return dec.decodeUint(v, tokenVal)
-	case reflect.Float32:
-		return dec.decodeFloat(v, tokenVal, 32)
-	case reflect.Float64:
-		return dec.decodeFloat(v, tokenVal, 64)
-	case reflect.Complex64, reflect.Complex128:
-		return dec.decodeComplex(v, tokenVal)
-	case reflect.String:
-		return dec.decodeString(v, tokenVal)
+	if encoding, ok := typeToValueEncoding[v.Type()]; ok {
+		return encoding.Decode(tokenVal, v)
+	} else {
+		// TODO: unexpected type
 	}
-	return nil
-}
-
-func (dec *Decoder) decodeBool(v reflect.Value, val []byte) error {
-	switch string(val) {
-	case "true":
-		v.SetBool(true)
-	case "false":
-		v.SetBool(false)
-	default:
-		return fmt.Errorf("unexpected bool value: %s", strconv.Quote(string(val)))
-	}
-	return nil
-}
-
-func (dec *Decoder) decodeInt(v reflect.Value, val []byte) error {
-	i := big.NewInt(0)
-	i, ok := i.SetString(string(val), 10)
-	if !ok {
-		return fmt.Errorf("unexpected int value: %s", strconv.Quote(string(val)))
-	}
-	// TODO: handle overflow
-	v.SetInt(i.Int64())
-	return nil
-}
-
-func (dec *Decoder) decodeUint(v reflect.Value, val []byte) error {
-	i := big.NewInt(0)
-	i, ok := i.SetString(string(val), 10)
-	if !ok {
-		return fmt.Errorf("unexpected int value: %s", strconv.Quote(string(val)))
-	}
-	// TODO: handle overflow
-	v.SetUint(i.Uint64())
-	return nil
-}
-
-func (dec *Decoder) decodeFloat(v reflect.Value, val []byte, bit int) error {
-	f, err := strconv.ParseFloat(string(val), bit)
-	if err != nil {
-		return fmt.Errorf("unexpected float value: %s", strconv.Quote(string(val)))
-	}
-	// TODO: handle overflow
-	v.SetFloat(f)
-	return nil
-}
-
-func (dec *Decoder) decodeComplex(v reflect.Value, val []byte) error {
-	var c complex128
-	if _, err := fmt.Sscan(string(val), &c); err != nil {
-		return err
-	}
-	// TODO: handle overflow
-	v.SetComplex(c)
-	return nil
-}
-
-func (dec *Decoder) decodeString(v reflect.Value, val []byte) error {
-	s, err := strconv.Unquote(string(val))
-	if err != nil {
-		s = string(val)
-	}
-	v.SetString(s)
 	return nil
 }
 
