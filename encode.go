@@ -133,9 +133,8 @@ func (enc *Encoder) encode(v reflect.Value) error {
 	return nil
 }
 
-func (enc *Encoder) encodeStruct(v reflect.Value) {
+func (enc *Encoder) encodeStruct(v reflect.Value) error {
 	t := v.Type()
-	enc.listStart(enc, t.NumField())
 	fieldNameMax := 0
 	for i := 0; i < t.NumField(); i++ {
 		l := len(t.Field(i).Name)
@@ -143,16 +142,21 @@ func (enc *Encoder) encodeStruct(v reflect.Value) {
 			fieldNameMax = l
 		}
 	}
-	for i := 0; i < t.NumField(); i++ {
-		if i > 0 {
-			enc.listSep(enc)
-		}
+	return enc.encodeList(t.NumField(), func(i int) error {
 		fieldName := t.Field(i).Name
 		enc.WriteString(fieldName)
 		enc.WriteString(": " + strings.Repeat(" ", fieldNameMax-len(fieldName)))
-		enc.encode(v.Field(i))
-	}
-	enc.listEnd(enc, t.NumField())
+		return enc.encode(v.Field(i))
+	})
+}
+
+func (enc *Encoder) disableIndent(f func()) {
+	m := enc.indentMode
+	enc.indentMode = false
+	defer func() {
+		enc.indentMode = m
+	}()
+	f()
 }
 
 func (enc *Encoder) encodeKey(v reflect.Value) {
@@ -165,23 +169,49 @@ func (enc *Encoder) encodeKey(v reflect.Value) {
 	enc.encode(v)
 }
 
-func (enc *Encoder) encodeMap(v reflect.Value) {
+func (enc *Encoder) encodeMap(v reflect.Value) error {
 	if v.IsNil() {
 		enc.encodeNil()
-		return
+		return nil
 	}
-	enc.listStart(enc, v.Len())
-	var sv stringValues = v.MapKeys()
-	sort.Sort(sv)
-	for i, k := range sv {
+	var keys stringValues = v.MapKeys()
+	sort.Sort(keys)
+	return enc.encodeList(v.Len(), func(i int) error {
+		key := keys[i]
+		enc.disableIndent(func() {
+			enc.encode(key)
+		})
+		enc.WriteString(": ")
+		return enc.encode(v.MapIndex(key))
+	})
+}
+
+func (enc *Encoder) encodeSlice(v reflect.Value) {
+	if v.IsNil() {
+		enc.encodeNil()
+	} else {
+		enc.encodeArray(v)
+	}
+}
+
+func (enc *Encoder) encodeArray(v reflect.Value) error {
+	return enc.encodeList(v.Len(), func(i int) error {
+		return enc.encode(v.Index(i))
+	})
+}
+
+func (enc *Encoder) encodeList(length int, encodeElem func(i int) error) error {
+	enc.listStart(enc, length)
+	for i := 0; i < length; i++ {
 		if i > 0 {
 			enc.listSep(enc)
 		}
-		enc.encodeKey(k)
-		enc.WriteString(": ")
-		enc.encode(v.MapIndex(k))
+		if err := encodeElem(i); err != nil {
+			return err
+		}
 	}
-	enc.listEnd(enc, v.Len())
+	enc.listEnd(enc, length)
+	return nil
 }
 
 func (enc *Encoder) encodeNil() {
@@ -214,29 +244,6 @@ func (enc *Encoder) encodeInterface(v reflect.Value) {
 		return
 	}
 	enc.encode(v.Elem())
-}
-
-func (enc *Encoder) encodeSlice(v reflect.Value) {
-	if v.IsNil() {
-		enc.encodeNil()
-	} else {
-		enc.encodeArray(v)
-	}
-}
-
-func (enc *Encoder) encodeArray(v reflect.Value) {
-	enc.listStart(enc, v.Len())
-	for i := 0; i < v.Len(); i++ {
-		if i > 0 {
-			enc.listSep(enc)
-		}
-		enc.encode(v.Index(i))
-	}
-	enc.listEnd(enc, v.Len())
-}
-
-func (enc *Encoder) EncodeValue(value reflect.Value) error {
-	return nil
 }
 
 type stringValues []reflect.Value

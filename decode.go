@@ -8,17 +8,16 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"strconv"
 )
 
 type Decoder struct {
-	*scanner
+	*parser
 	refSetter
 }
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{
-		newScanner(r),
+		newParser(r),
 		newRefSetter(),
 	}
 }
@@ -75,7 +74,7 @@ func (dec *Decoder) decode(v reflect.Value) (err error) {
 	}
 
 	// values
-	tokenVal, err := dec.expectValue()
+	tokenVal, err := dec.getValue()
 	if err != nil {
 		return err
 	}
@@ -123,12 +122,12 @@ func (dec *Decoder) decodeArray(v reflect.Value) error {
 
 func (dec *Decoder) decodeStruct(v reflect.Value) error {
 	return dec.decodeList(v, func() error {
-		fieldName, err := dec.expectFieldName()
+		fieldName, err := dec.getValue()
 		if err != nil {
 			return err
 		}
 		elem := reflect.Value{}
-		if field := v.FieldByName(fieldName); field.CanSet() {
+		if field := v.FieldByName(string(fieldName)); field.CanSet() {
 			elem = field
 		}
 		if err := dec.next(); err != nil {
@@ -197,77 +196,11 @@ func (dec *Decoder) decodeList(sv reflect.Value, decodeElem func() error) error 
 	return nil
 }
 
-func (dec *Decoder) next() error {
-	for dec.scan() {
-		if dec.token.typ == tokenComment {
-			continue
-		} else {
-			break
-		}
-	}
-	return dec.err
-}
-
 func (dec *Decoder) skipColon() error {
 	if dec.token.typ == tokenString && string(dec.token.val) == ":" {
 		return dec.next()
 	}
 	return nil
-}
-
-func (dec *Decoder) expectFieldName() (string, error) {
-	val, err := dec.expectValue()
-	if err != nil {
-		return "", err
-	}
-
-	return string(val), nil
-}
-
-func (dec *Decoder) expectValue() ([]byte, error) {
-	if dec.token.typ == tokenString {
-		return dec.token.val, nil
-	}
-	return nil, dec.error()
-}
-
-func (dec *Decoder) isRef() bool {
-	return dec.token.typ == tokenString && len(dec.token.val) > 0 && dec.token.val[0] == '^'
-}
-
-func (dec *Decoder) isListStart() bool {
-	return dec.token.typ == tokenLeftBrace
-}
-
-func (dec *Decoder) isNil() bool {
-	return dec.token.typ == tokenString && string(dec.token.val) == "nil"
-}
-
-func (dec *Decoder) isListEnd() bool {
-	return dec.token.typ == tokenRightBrace
-}
-
-func (dec *Decoder) isSepOrListEnd() bool {
-	return dec.isSep() || dec.isListEnd()
-}
-
-func (dec *Decoder) isSep() bool {
-	return dec.token.typ == tokenComma
-}
-
-func (dec *Decoder) error() error {
-	return fmt.Errorf("unexpected token: %v, %s", dec.token.typ,
-		string(dec.token.val))
-}
-
-// A DecodeValueError happens when the decoded string and the type of provided value do not match.
-type DecodeValueError struct {
-	Value string
-	Type  reflect.Type
-}
-
-func (e *DecodeValueError) Error() string {
-	return "ogdl: cannot unmarshal " + strconv.Quote(e.Value) + " into Go value of type " + e.Type.String()
 }
 
 func deref(v reflect.Value) reflect.Value {

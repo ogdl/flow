@@ -6,13 +6,14 @@ package flow
 
 import (
 	"fmt"
+	"io"
 	"math/big"
 	"reflect"
 	"strconv"
 )
 
 type ValueEncoding struct {
-	Encode func(v reflect.Value, w writer) error
+	Encode func(v reflect.Value, w io.Writer) error
 	Decode func(val []byte, v reflect.Value) error
 }
 
@@ -36,8 +37,8 @@ var typeToValueEncoding = map[reflect.Type]ValueEncoding{
 	reflect.TypeOf(string("")):    ValueEncoding{encodeString, decodeString},
 }
 
-func encodeBool(v reflect.Value, w writer) error {
-	return w.WriteString(strconv.FormatBool(v.Bool()))
+func encodeBool(v reflect.Value, w io.Writer) error {
+	return writeString(w, strconv.FormatBool(v.Bool()))
 }
 
 func decodeBool(val []byte, v reflect.Value) error {
@@ -52,8 +53,8 @@ func decodeBool(val []byte, v reflect.Value) error {
 	return nil
 }
 
-func encodeInt(v reflect.Value, w writer) error {
-	return w.WriteString(strconv.FormatInt(v.Int(), 10))
+func encodeInt(v reflect.Value, w io.Writer) error {
+	return writeString(w, strconv.FormatInt(v.Int(), 10))
 }
 
 func decodeInt(val []byte, v reflect.Value) error {
@@ -67,8 +68,8 @@ func decodeInt(val []byte, v reflect.Value) error {
 	return nil
 }
 
-func encodeUint(v reflect.Value, w writer) error {
-	return w.WriteString(strconv.FormatUint(v.Uint(), 10))
+func encodeUint(v reflect.Value, w io.Writer) error {
+	return writeString(w, strconv.FormatUint(v.Uint(), 10))
 }
 
 func decodeUint(val []byte, v reflect.Value) error {
@@ -82,7 +83,7 @@ func decodeUint(val []byte, v reflect.Value) error {
 	return nil
 }
 
-func encodeFloat32(v reflect.Value, w writer) error {
+func encodeFloat32(v reflect.Value, w io.Writer) error {
 	return encodeFloat(v, w, 32)
 }
 
@@ -90,7 +91,7 @@ func decodeFloat32(val []byte, v reflect.Value) error {
 	return decodeFloat(val, v, 32)
 }
 
-func encodeFloat64(v reflect.Value, w writer) error {
+func encodeFloat64(v reflect.Value, w io.Writer) error {
 	return encodeFloat(v, w, 32)
 }
 
@@ -98,8 +99,8 @@ func decodeFloat64(val []byte, v reflect.Value) error {
 	return decodeFloat(val, v, 64)
 }
 
-func encodeFloat(v reflect.Value, w writer, bit int) error {
-	return w.WriteString(strconv.FormatFloat(v.Float(), 'g', -1, bit))
+func encodeFloat(v reflect.Value, w io.Writer, bit int) error {
+	return writeString(w, strconv.FormatFloat(v.Float(), 'g', -1, bit))
 }
 
 func decodeFloat(val []byte, v reflect.Value, bit int) error {
@@ -112,29 +113,29 @@ func decodeFloat(val []byte, v reflect.Value, bit int) error {
 	return nil
 }
 
-func encodeComplex64(v reflect.Value, w writer) error {
+func encodeComplex64(v reflect.Value, w io.Writer) error {
 	return encodeComplex(v, w, 32)
 }
 
-func encodeComplex128(v reflect.Value, w writer) error {
+func encodeComplex128(v reflect.Value, w io.Writer) error {
 	return encodeComplex(v, w, 64)
 }
 
-func encodeComplex(v reflect.Value, w writer, bitSize int) error {
+func encodeComplex(v reflect.Value, w io.Writer, bitSize int) error {
 	c := v.Complex()
 	r, i := real(c), imag(c)
-	if err := w.WriteString(strconv.FormatFloat(r, 'g', -1, bitSize)); err != nil {
+	if err := writeString(w, strconv.FormatFloat(r, 'g', -1, bitSize)); err != nil {
 		return err
 	}
 	if i >= 0 {
-		if err := w.WriteByte('+'); err != nil {
+		if err := writeByte(w, '+'); err != nil {
 			return err
 		}
 	}
-	if err := w.WriteString(strconv.FormatFloat(i, 'g', -1, bitSize)); err != nil {
+	if err := writeString(w, strconv.FormatFloat(i, 'g', -1, bitSize)); err != nil {
 		return err
 	}
-	if err := w.WriteByte('i'); err != nil {
+	if err := writeByte(w, 'i'); err != nil {
 		return err
 	}
 	return nil
@@ -150,8 +151,8 @@ func decodeComplex(val []byte, v reflect.Value) error {
 	return nil
 }
 
-func encodeString(v reflect.Value, w writer) error {
-	return w.WriteString(strconv.Quote(v.String()))
+func encodeString(v reflect.Value, w io.Writer) error {
+	return writeString(w, strconv.Quote(v.String()))
 }
 
 func decodeString(val []byte, v reflect.Value) error {
@@ -161,4 +162,14 @@ func decodeString(val []byte, v reflect.Value) error {
 	}
 	v.SetString(s)
 	return nil
+}
+
+func writeString(w io.Writer, s string) error {
+	_, err := w.Write([]byte(s))
+	return err
+}
+
+func writeByte(w io.Writer, b byte) error {
+	_, err := w.Write([]byte{b})
+	return err
 }
