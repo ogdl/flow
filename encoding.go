@@ -5,6 +5,7 @@
 package flow
 
 import (
+	"bytes"
 	"reflect"
 	"sort"
 	"strings"
@@ -241,7 +242,7 @@ func skipColon(parser Parser) error {
 }
 
 func encodeKey(v reflect.Value) string {
-	var buf bytesBuffer
+	var buf bytes.Buffer
 	en := NewEncoder(&buf)
 	en.Encode(v)
 	return buf.String()
@@ -251,3 +252,10 @@ func composeValue(c Composer, s string) error {
 	_, err := c.Write([]byte(s))
 	return err
 }
+
+type stringValues []reflect.Value
+
+func (sv stringValues) Len() int           { return len(sv) }
+func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
+func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
+func (sv stringValues) get(i int) string   { return sv[i].String() }

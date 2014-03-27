@@ -11,10 +11,10 @@ import (
 )
 
 type Parser interface {
+	Value() ([]byte, error)
 	ParseList(walkFn func(int) error) error
 	ParseAny(v reflect.Value) error
 	GoToOnlyChild() error
-	Value() ([]byte, error)
 }
 
 type parser struct {

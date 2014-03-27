@@ -11,18 +11,14 @@ import (
 )
 
 type Composer interface {
+	io.Writer
 	ComposeList(length int, composeElem func(i int) error) error
 	ComposeAny(v reflect.Value) error
 	Indented() bool
-	io.Writer
-}
-
-type bytesBuffer struct {
-	bytes.Buffer
 }
 
 type composer struct {
-	bytesBuffer
+	bytes.Buffer
 	indented bool
 	prefix   string
 	indent   string
@@ -97,18 +93,6 @@ func (t *composer) listEnd(count int) {
 	t.WriteString("}")
 }
 
-func (t *composer) WriteString(s string) error {
-	_, err := t.bytesBuffer.WriteString(s)
-	return err
-}
-
 func (t *composer) encodeNil() {
 	t.WriteString("nil")
 }
-
-type stringValues []reflect.Value
-
-func (sv stringValues) Len() int           { return len(sv) }
-func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
-func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
-func (sv stringValues) get(i int) string   { return sv[i].String() }

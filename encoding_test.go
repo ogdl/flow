@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	//	"time"
 
 	"github.com/hailiang/gspec/core"
 	exp "github.com/hailiang/gspec/expectation"
@@ -172,8 +173,20 @@ var _encodingTestGroups = encodingTestGroups{
 				pi := &i
 				return &pi
 			}(), "2"},
+			{&struct{ I int }{42}, "{I: 42}"},
 		},
 	},
+
+	/*
+		{"TextMarshaler/TextUnmarshaler",
+			[]encodingTestCase{
+				{func() *time.Time {
+					t := time.Date(2014, 5, 27, 20, 40, 11, 99, time.UTC)
+					return &t
+				}(), "1"},
+			},
+		},
+	*/
 
 	{"interface",
 		[]encodingTestCase{},
@@ -199,6 +212,10 @@ var _encodingTestGroups = encodingTestGroups{
 			}(), "{I: ^1 42, J: ^1, K: ^1}"},
 		},
 	},
+}
+
+type structType struct {
+	IVal int
 }
 
 var marshalIndentTestGroups = encodingTestGroups{

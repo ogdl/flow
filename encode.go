@@ -80,10 +80,10 @@ func (enc *Encoder) ComposeAny(v reflect.Value) error {
 		return nil
 	}
 	if v.CanAddr() {
-		addr := v.Addr().Pointer()
-		id := enc.getPtrID(addr)
-		if id > 0 && !enc.m[addr].defined {
-			enc.define(addr)
+		key := newRefKey(v)
+		id := enc.getPtrID(key)
+		if id > 0 && !enc.m[key].defined {
+			enc.define(key)
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 		}
 	}
@@ -109,13 +109,13 @@ func (enc *Encoder) encodePtr(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	addr := v.Pointer()
-	id := enc.getPtrID(addr)
+	key := newRefKey(v.Elem())
+	id := enc.getPtrID(key)
 	if id > 0 {
-		if enc.m[addr].defined {
+		if enc.m[key].defined {
 			enc.WriteString(fmt.Sprintf("^%d", id))
 		} else {
-			enc.define(addr)
+			enc.define(key)
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 			enc.ComposeAny(v.Elem())
 		}
@@ -137,30 +137,39 @@ type refInfo struct {
 	defined bool
 }
 
+type refKey struct {
+	addr uintptr
+	typ  reflect.Type
+}
+
+func newRefKey(v reflect.Value) refKey {
+	return refKey{v.Addr().Pointer(), v.Type()}
+}
+
 type refDetector struct {
-	m      map[uintptr]refInfo
+	m      map[refKey]refInfo
 	serial int
 }
 
 func newRefDetector() refDetector {
-	return refDetector{make(map[uintptr]refInfo), 1}
+	return refDetector{make(map[refKey]refInfo), 1}
 }
 
-func (d *refDetector) getPtrID(addr uintptr) int {
-	if ref := d.m[addr]; ref.id > 0 {
+func (d *refDetector) getPtrID(key refKey) int {
+	if ref := d.m[key]; ref.id > 0 {
 		return ref.id
 	}
 	return 0
 }
 
-func (d *refDetector) define(addr uintptr) {
-	ref := d.m[addr]
+func (d *refDetector) define(key refKey) {
+	ref := d.m[key]
 	ref.defined = true
-	d.m[addr] = ref
+	d.m[key] = ref
 }
 
-func (d *refDetector) add(addr uintptr) {
-	ref := d.m[addr]
+func (d *refDetector) add(key refKey) {
+	ref := d.m[key]
 	switch ref.id {
 	case 0:
 		ref.id = -1
@@ -168,14 +177,14 @@ func (d *refDetector) add(addr uintptr) {
 		ref.id = d.serial
 		d.serial++
 	}
-	d.m[addr] = ref
+	d.m[key] = ref
 }
 
 func (d *refDetector) populate(v reflect.Value) {
 	if v.Kind() != reflect.Ptr && v.CanAddr() {
-		addr := v.Addr().Pointer()
-		d.add(addr)
-		if d.m[addr].id > 0 {
+		key := newRefKey(v)
+		d.add(key)
+		if d.m[key].id > 0 {
 			return
 		}
 	}
