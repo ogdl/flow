@@ -30,14 +30,14 @@ func (dec *Decoder) Decode(v interface{}) error {
 	if err := dec.next(); err != nil {
 		return err
 	}
-	if err := dec.decode(rv); err != nil {
+	if err := dec.ParseAny(rv); err != nil {
 		return err
 	}
 	dec.setAllRef()
 	return nil
 }
 
-func (dec *Decoder) decode(v reflect.Value) (err error) {
+func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 	if !v.CanSet() && v.Kind() != reflect.Ptr { // TODO: interface should also be allowed.
 		return fmt.Errorf("unsetable nonpointer value: %v", v)
 	}
@@ -62,143 +62,21 @@ func (dec *Decoder) decode(v reflect.Value) (err error) {
 			err = e
 		}
 	}()
-	switch v.Kind() {
-	case reflect.Slice:
-		return dec.decodeSlice(v)
-	case reflect.Array:
-		return dec.decodeArray(v)
-	case reflect.Struct:
-		return dec.decodeStruct(v)
-	case reflect.Map:
-		return dec.decodeMap(v)
+	for _, match := range matchFuncs {
+		if encoding, ok := match(v); ok {
+			return encoding.Decode(dec, v)
+		}
 	}
 
 	// values
-	tokenVal, err := dec.getValue()
-	if err != nil {
-		return err
+	tokenVal, ok := dec.Value()
+	if !ok {
+		return dec.error()
 	}
 	if encoding, ok := typeToValueEncoding[v.Type()]; ok {
 		return encoding.Decode(tokenVal, v)
 	} else {
 		// TODO: unexpected type
-	}
-	return nil
-}
-
-func (dec *Decoder) decodeSlice(v reflect.Value) error {
-	if dec.isNil() {
-		v.Set(reflect.Zero(v.Type()))
-		return nil
-	}
-	i := -1
-	return dec.decodeList(v, func() error {
-		i++
-		if i == v.Len() {
-			v.Set(reflect.Append(v, reflect.New(v.Type().Elem()).Elem()))
-		}
-		elem := v.Index(i)
-		if err := dec.decode(elem); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (dec *Decoder) decodeArray(v reflect.Value) error {
-	i := -1
-	return dec.decodeList(v, func() error {
-		i++
-		elem := reflect.Value{}
-		if i < v.Len() {
-			elem = v.Index(i)
-		}
-		if err := dec.decode(elem); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (dec *Decoder) decodeStruct(v reflect.Value) error {
-	return dec.decodeList(v, func() error {
-		fieldName, err := dec.getValue()
-		if err != nil {
-			return err
-		}
-		elem := reflect.Value{}
-		if field := v.FieldByName(string(fieldName)); field.CanSet() {
-			elem = field
-		}
-		if err := dec.next(); err != nil {
-			return err
-		}
-		if err := dec.skipColon(); err != nil {
-			return err
-		}
-		if err := dec.decode(elem); err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
-func (dec *Decoder) decodeMap(v reflect.Value) error {
-	if dec.isNil() {
-		v.Set(reflect.Zero(v.Type()))
-		return nil
-	}
-	if v.IsNil() {
-		v.Set(reflect.MakeMap(v.Type()))
-	}
-	return dec.decodeList(v, func() error {
-		key := reflect.New(v.Type().Key()).Elem()
-		if err := dec.decode(key); err != nil {
-			return err
-		}
-		elem := reflect.New(v.Type().Elem()).Elem()
-		if err := dec.next(); err != nil {
-			return err
-		}
-		if err := dec.skipColon(); err != nil {
-			return err
-		}
-		if err := dec.decode(elem); err != nil {
-			return err
-		}
-		v.SetMapIndex(key, elem)
-		return nil
-	})
-}
-
-func (dec *Decoder) decodeList(sv reflect.Value, decodeElem func() error) error {
-	if !dec.isListStart() {
-		return dec.error()
-	}
-	if err := dec.next(); err != nil {
-		return err
-	}
-	for {
-		if dec.isListEnd() {
-			break
-		}
-		if err := decodeElem(); err != nil {
-			return err
-		}
-		if dec.isSep() {
-			if err := dec.next(); err != nil {
-				return err
-			}
-		} else if !dec.isListEnd() {
-			return dec.error()
-		}
-	}
-	return nil
-}
-
-func (dec *Decoder) skipColon() error {
-	if dec.token.typ == tokenString && string(dec.token.val) == ":" {
-		return dec.next()
 	}
 	return nil
 }

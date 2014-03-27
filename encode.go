@@ -5,7 +5,6 @@
 package flow
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"reflect"
@@ -30,21 +29,10 @@ func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 	return enc.Bytes(), nil
 }
 
-type writer interface {
-	io.Writer
-	WriteByte(c byte) error
-	WriteString(s string) error
-}
-
-type bytesBuffer struct {
-	bytes.Buffer
-}
-
 type Encoder struct {
 	w io.Writer
-	bytesBuffer
 	refDetector
-	indenter
+	composer
 }
 
 func NewEncoder(w io.Writer) *Encoder {
@@ -53,23 +41,18 @@ func NewEncoder(w io.Writer) *Encoder {
 		refDetector: newRefDetector()}
 }
 
-func (enc *Encoder) WriteString(s string) error {
-	_, err := enc.bytesBuffer.WriteString(s)
-	return err
-}
-
 func (enc *Encoder) marshal(v interface{}) error {
 	enc.populate(reflect.ValueOf(v))
-	if err := enc.encode(reflect.ValueOf(v)); err != nil {
+	if err := enc.ComposeAny(reflect.ValueOf(v)); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (enc *Encoder) marshalIndent(v interface{}, prefix, indent string) error {
-	enc.indenter.start(enc, prefix, indent)
+	enc.start(prefix, indent)
 	defer func() {
-		enc.indenter.stop()
+		enc.stop()
 	}()
 	return enc.marshal(v)
 }
@@ -85,7 +68,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 			return fmt.Errorf("object with cyclic reference must be addressable, %v", v)
 		}
 	}
-	if err := enc.encode(rv); err != nil {
+	if err := enc.ComposeAny(rv); err != nil {
 		return err
 	}
 	_, err := enc.w.Write(enc.Bytes())
@@ -93,7 +76,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 }
 
 // encode never returns an error, it may panics with bytes.ErrTooLarge.
-func (enc *Encoder) encode(v reflect.Value) error {
+func (enc *Encoder) ComposeAny(v reflect.Value) error {
 	if !v.IsValid() {
 		enc.encodeNil()
 		return nil
@@ -113,11 +96,12 @@ func (enc *Encoder) encode(v reflect.Value) error {
 	} else {
 		// TODO: unexpected type
 	}
+	for _, match := range matchFuncs {
+		if encoding, ok := match(v); ok && encoding.Encode != nil {
+			return encoding.Encode(v, enc)
+		}
+	}
 	switch v.Kind() {
-	case reflect.Array:
-		enc.encodeArray(v)
-	case reflect.Slice:
-		enc.encodeSlice(v)
 	case reflect.Struct:
 		enc.encodeStruct(v)
 	case reflect.Map:
@@ -136,17 +120,22 @@ func (enc *Encoder) encode(v reflect.Value) error {
 func (enc *Encoder) encodeStruct(v reflect.Value) error {
 	t := v.Type()
 	fieldNameMax := 0
-	for i := 0; i < t.NumField(); i++ {
-		l := len(t.Field(i).Name)
-		if l > fieldNameMax {
-			fieldNameMax = l
+	if enc.indentMode {
+		for i := 0; i < t.NumField(); i++ {
+			l := len(t.Field(i).Name)
+			if l > fieldNameMax {
+				fieldNameMax = l
+			}
 		}
 	}
-	return enc.encodeList(t.NumField(), func(i int) error {
+	return enc.ComposeList(t.NumField(), func(i int) error {
 		fieldName := t.Field(i).Name
-		enc.WriteString(fieldName)
-		enc.WriteString(": " + strings.Repeat(" ", fieldNameMax-len(fieldName)))
-		return enc.encode(v.Field(i))
+		enc.ComposeValue(fieldName)
+		enc.ComposeValue(": ")
+		if enc.indentMode {
+			enc.ComposeValue(strings.Repeat(" ", fieldNameMax-len(fieldName)))
+		}
+		return enc.ComposeAny(v.Field(i))
 	})
 }
 
@@ -159,16 +148,6 @@ func (enc *Encoder) disableIndent(f func()) {
 	f()
 }
 
-func (enc *Encoder) encodeKey(v reflect.Value) {
-	m := enc.indentMode
-	enc.indentMode = false
-	defer func() {
-		enc.indentMode = m
-	}()
-
-	enc.encode(v)
-}
-
 func (enc *Encoder) encodeMap(v reflect.Value) error {
 	if v.IsNil() {
 		enc.encodeNil()
@@ -176,46 +155,31 @@ func (enc *Encoder) encodeMap(v reflect.Value) error {
 	}
 	var keys stringValues = v.MapKeys()
 	sort.Sort(keys)
-	return enc.encodeList(v.Len(), func(i int) error {
+	/*
+	keyMax := 0
+	if enc.indentMode {
+		for _, key := range keys {
+			l := len(key.String())
+			if l > keyMax {
+				keyMax = l
+			}
+		}
+	}
+	*/
+	return enc.ComposeList(v.Len(), func(i int) error {
 		key := keys[i]
-		enc.disableIndent(func() {
-			enc.encode(key)
-		})
-		enc.WriteString(": ")
-		return enc.encode(v.MapIndex(key))
-	})
-}
-
-func (enc *Encoder) encodeSlice(v reflect.Value) {
-	if v.IsNil() {
-		enc.encodeNil()
-	} else {
-		enc.encodeArray(v)
-	}
-}
-
-func (enc *Encoder) encodeArray(v reflect.Value) error {
-	return enc.encodeList(v.Len(), func(i int) error {
-		return enc.encode(v.Index(i))
-	})
-}
-
-func (enc *Encoder) encodeList(length int, encodeElem func(i int) error) error {
-	enc.listStart(enc, length)
-	for i := 0; i < length; i++ {
-		if i > 0 {
-			enc.listSep(enc)
+		var buf bytesBuffer
+		en := NewEncoder(&buf)
+		en.Encode(key)
+		enc.ComposeValue(buf.String())
+		enc.ComposeValue(": ")
+		/*
+		if enc.indentMode {
+			enc.ComposeValue(strings.Repeat(" ", keyMax-len(key.String())))
 		}
-		if err := encodeElem(i); err != nil {
-			return err
-		}
-	}
-	enc.listEnd(enc, length)
-	return nil
-}
-
-func (enc *Encoder) encodeNil() {
-	enc.WriteString("nil")
+		*/
+		return enc.ComposeAny(v.MapIndex(key))
+	})
 }
 
 func (enc *Encoder) encodePtr(v reflect.Value) {
@@ -231,10 +195,10 @@ func (enc *Encoder) encodePtr(v reflect.Value) {
 		} else {
 			enc.define(addr)
 			enc.WriteString(fmt.Sprintf("^%d ", id))
-			enc.encode(v.Elem())
+			enc.ComposeAny(v.Elem())
 		}
 	} else {
-		enc.encode(v.Elem())
+		enc.ComposeAny(v.Elem())
 	}
 }
 
@@ -243,7 +207,7 @@ func (enc *Encoder) encodeInterface(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	enc.encode(v.Elem())
+	enc.ComposeAny(v.Elem())
 }
 
 type stringValues []reflect.Value

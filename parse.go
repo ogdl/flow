@@ -7,7 +7,15 @@ package flow
 import (
 	"fmt"
 	"io"
+	"reflect"
 )
+
+type Parser interface {
+	ParseList(walkFn func(int) error) error
+	ParseAny(v reflect.Value) error
+	GoToOnlyChild() error
+	Value() ([]byte, bool)
+}
 
 type parser struct {
 	*scanner
@@ -18,7 +26,35 @@ func newParser(r io.Reader) *parser {
 	return t
 }
 
-func (t *parser) firstChild() *parser {
+func (t *parser) ParseList(parseElem func(int) error) error {
+	if !t.isList() {
+		return t.error()
+	}
+	if err := t.GoToOnlyChild(); err != nil {
+		return err
+	}
+	for i := 0; !t.isListEnd(); i++ {
+		if err := parseElem(i); err != nil {
+			return err
+		}
+		if err := t.nextSibling(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *parser) GoToOnlyChild() error {
+	return t.next()
+}
+
+func (t *parser) nextSibling() error {
+	if t.isSep() {
+		return t.next()
+	}
+	if !t.isListEnd() {
+		return t.error()
+	}
 	return nil
 }
 
@@ -37,13 +73,13 @@ func (t *parser) isRef() bool {
 	return t.isValue() && len(t.token.val) > 0 && t.token.val[0] == '^'
 }
 
-func (t *parser) isListStart() bool {
+func (t *parser) isList() bool {
 	return t.token.typ == tokenLeftBrace
 }
 
 func (t *parser) isNil() bool {
-	val, err := t.getValue()
-	if err != nil {
+	val, ok := t.Value()
+	if !ok {
 		return false
 	}
 	return string(val) == "nil"
@@ -65,11 +101,11 @@ func (t *parser) isValue() bool {
 	return t.token.typ == tokenString
 }
 
-func (t *parser) getValue() ([]byte, error) {
+func (t *parser) Value() ([]byte, bool) {
 	if !t.isValue() {
-		return nil, t.error()
+		return nil, false
 	}
-	return t.token.val, nil
+	return t.token.val, true
 }
 
 func (t *parser) error() error {
