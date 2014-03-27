@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
-	"strings"
 )
 
 func Marshal(v interface{}) ([]byte, error) {
@@ -89,23 +87,12 @@ func (enc *Encoder) ComposeAny(v reflect.Value) error {
 			enc.WriteString(fmt.Sprintf("^%d ", id))
 		}
 	}
-	if encoding, ok := typeToValueEncoding[v.Type()]; ok {
-		if encoding.Encode != nil {
-			return encoding.Encode(v, enc)
-		}
-	} else {
-		// TODO: unexpected type
-	}
 	for _, match := range matchFuncs {
 		if encoding, ok := match(v); ok && encoding.Encode != nil {
 			return encoding.Encode(v, enc)
 		}
 	}
 	switch v.Kind() {
-	case reflect.Struct:
-		enc.encodeStruct(v)
-	case reflect.Map:
-		enc.encodeMap(v)
 	case reflect.Ptr:
 		enc.encodePtr(v)
 	case reflect.Interface:
@@ -115,71 +102,6 @@ func (enc *Encoder) ComposeAny(v reflect.Value) error {
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	}
 	return nil
-}
-
-func (enc *Encoder) encodeStruct(v reflect.Value) error {
-	t := v.Type()
-	fieldNameMax := 0
-	if enc.indentMode {
-		for i := 0; i < t.NumField(); i++ {
-			l := len(t.Field(i).Name)
-			if l > fieldNameMax {
-				fieldNameMax = l
-			}
-		}
-	}
-	return enc.ComposeList(t.NumField(), func(i int) error {
-		fieldName := t.Field(i).Name
-		enc.ComposeValue(fieldName)
-		enc.ComposeValue(": ")
-		if enc.indentMode {
-			enc.ComposeValue(strings.Repeat(" ", fieldNameMax-len(fieldName)))
-		}
-		return enc.ComposeAny(v.Field(i))
-	})
-}
-
-func (enc *Encoder) disableIndent(f func()) {
-	m := enc.indentMode
-	enc.indentMode = false
-	defer func() {
-		enc.indentMode = m
-	}()
-	f()
-}
-
-func (enc *Encoder) encodeMap(v reflect.Value) error {
-	if v.IsNil() {
-		enc.encodeNil()
-		return nil
-	}
-	var keys stringValues = v.MapKeys()
-	sort.Sort(keys)
-	/*
-	keyMax := 0
-	if enc.indentMode {
-		for _, key := range keys {
-			l := len(key.String())
-			if l > keyMax {
-				keyMax = l
-			}
-		}
-	}
-	*/
-	return enc.ComposeList(v.Len(), func(i int) error {
-		key := keys[i]
-		var buf bytesBuffer
-		en := NewEncoder(&buf)
-		en.Encode(key)
-		enc.ComposeValue(buf.String())
-		enc.ComposeValue(": ")
-		/*
-		if enc.indentMode {
-			enc.ComposeValue(strings.Repeat(" ", keyMax-len(key.String())))
-		}
-		*/
-		return enc.ComposeAny(v.MapIndex(key))
-	})
 }
 
 func (enc *Encoder) encodePtr(v reflect.Value) {
@@ -209,13 +131,6 @@ func (enc *Encoder) encodeInterface(v reflect.Value) {
 	}
 	enc.ComposeAny(v.Elem())
 }
-
-type stringValues []reflect.Value
-
-func (sv stringValues) Len() int           { return len(sv) }
-func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
-func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
-func (sv stringValues) get(i int) string   { return sv[i].String() }
 
 type refInfo struct {
 	id      int

@@ -63,22 +63,11 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 		}
 	}()
 	for _, match := range matchFuncs {
-		if encoding, ok := match(v); ok {
+		if encoding, ok := match(v); ok && encoding.Decode != nil {
 			return encoding.Decode(dec, v)
 		}
 	}
-
-	// values
-	tokenVal, ok := dec.Value()
-	if !ok {
-		return dec.error()
-	}
-	if encoding, ok := typeToValueEncoding[v.Type()]; ok {
-		return encoding.Decode(tokenVal, v)
-	} else {
-		// TODO: unexpected type
-	}
-	return nil
+	return fmt.Errorf("no decoding method defined for type: %v", v.Type())
 }
 
 func deref(v reflect.Value) reflect.Value {

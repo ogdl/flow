@@ -144,7 +144,7 @@ var _encodingTestGroups = encodingTestGroups{
 			{struct{}{}, "{}"},
 			{struct{ IVal int }{IVal: 1}, "{IVal: 1}"},
 			{struct {
-				IntVal int
+				IntVal    int
 				StringVal string
 			}{IntVal: 1, StringVal: "a"}, `{IntVal: 1, StringVal: "a"}`},
 		},

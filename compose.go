@@ -6,13 +6,15 @@ package flow
 
 import (
 	"bytes"
+	"io"
 	"reflect"
 )
 
 type Composer interface {
 	ComposeList(length int, composeElem func(i int) error) error
 	ComposeAny(v reflect.Value) error
-	ComposeValue(s string) error
+	Indented() bool
+	io.Writer
 }
 
 type bytesBuffer struct {
@@ -21,10 +23,14 @@ type bytesBuffer struct {
 
 type composer struct {
 	bytesBuffer
-	indentMode bool
-	prefix     string
-	indent     string
-	depth      int
+	indented bool
+	prefix   string
+	indent   string
+	depth    int
+}
+
+func (t *composer) Indented() bool {
+	return t.indented
 }
 
 func (t *composer) ComposeList(length int, composeElem func(i int) error) error {
@@ -41,12 +47,8 @@ func (t *composer) ComposeList(length int, composeElem func(i int) error) error 
 	return nil
 }
 
-func (t *composer) ComposeValue(s string) error {
-	return t.WriteString(s)
-}
-
 func (t *composer) start(prefix, indent string) {
-	t.indentMode = true
+	t.indented = true
 	t.prefix = prefix
 	t.indent = indent
 	t.depth = 0
@@ -54,7 +56,7 @@ func (t *composer) start(prefix, indent string) {
 }
 
 func (t *composer) stop() {
-	t.indentMode = false
+	t.indented = false
 }
 
 func (t *composer) newLine() {
@@ -67,7 +69,7 @@ func (t *composer) newLine() {
 
 func (t *composer) listStart(count int) {
 	t.WriteString("{")
-	if t.indentMode {
+	if t.indented {
 		if count > 0 {
 			t.depth++
 			t.newLine()
@@ -76,7 +78,7 @@ func (t *composer) listStart(count int) {
 }
 
 func (t *composer) listSep() {
-	if t.indentMode {
+	if t.indented {
 		t.WriteString(",")
 		t.newLine()
 	} else {
@@ -85,7 +87,7 @@ func (t *composer) listSep() {
 }
 
 func (t *composer) listEnd(count int) {
-	if t.indentMode {
+	if t.indented {
 		if count > 0 {
 			t.depth--
 			t.WriteString(",")
@@ -103,3 +105,10 @@ func (t *composer) WriteString(s string) error {
 func (t *composer) encodeNil() {
 	t.WriteString("nil")
 }
+
+type stringValues []reflect.Value
+
+func (sv stringValues) Len() int           { return len(sv) }
+func (sv stringValues) Swap(i, j int)      { sv[i], sv[j] = sv[j], sv[i] }
+func (sv stringValues) Less(i, j int) bool { return sv.get(i) < sv.get(j) }
+func (sv stringValues) get(i int) string   { return sv[i].String() }

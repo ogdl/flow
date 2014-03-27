@@ -14,7 +14,7 @@ type Parser interface {
 	ParseList(walkFn func(int) error) error
 	ParseAny(v reflect.Value) error
 	GoToOnlyChild() error
-	Value() ([]byte, bool)
+	Value() ([]byte, error)
 }
 
 type parser struct {
@@ -78,8 +78,8 @@ func (t *parser) isList() bool {
 }
 
 func (t *parser) isNil() bool {
-	val, ok := t.Value()
-	if !ok {
+	val, err := t.Value()
+	if err != nil {
 		return false
 	}
 	return string(val) == "nil"
@@ -101,11 +101,11 @@ func (t *parser) isValue() bool {
 	return t.token.typ == tokenString
 }
 
-func (t *parser) Value() ([]byte, bool) {
+func (t *parser) Value() ([]byte, error) {
 	if !t.isValue() {
-		return nil, false
+		return nil, t.error()
 	}
-	return t.token.val, true
+	return t.token.val, nil
 }
 
 func (t *parser) error() error {
