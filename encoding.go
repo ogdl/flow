@@ -40,6 +40,7 @@ func init() {
 	matchFuncs = []MatchFunc{
 		matchValue,
 		matchMarshaler,
+		matchTextMarshaler,
 		matchStruct,
 		matchSlice,
 		matchMap,
@@ -66,6 +67,53 @@ func matchValue(v reflect.Value) (*Encoding, bool) {
 }
 
 func matchMarshaler(v reflect.Value) (*Encoding, bool) {
+	var m Marshaler
+	var u Unmarshaler
+	if v.Type().Implements(marshalerType) {
+		m = v.Interface().(Marshaler)
+	}
+	if v.Type().Implements(unmarshalerType) {
+		u = v.Interface().(Unmarshaler)
+	}
+	if v.CanAddr() {
+		v = v.Addr()
+		if v.Type().Implements(marshalerType) {
+			m = v.Interface().(Marshaler)
+		}
+		if v.Type().Implements(unmarshalerType) {
+			u = v.Interface().(Unmarshaler)
+		}
+	}
+	if m == nil || u == nil {
+		return nil, false
+	}
+	return &Encoding{
+		func(v reflect.Value, c Composer) error {
+			b, err := m.MarshalOGDL()
+			if err != nil {
+				return err
+			}
+			if bytes.IndexAny(b, "\t :{},") != -1 {
+				b = []byte(strconv.Quote(string(b)))
+			}
+			c.Write(b)
+			return nil
+		},
+		func(parser Parser, v reflect.Value) error {
+			b, err := parser.Value()
+			if err != nil {
+				return err
+			}
+			s, err := strconv.Unquote(string(b))
+			if err != nil {
+				return err
+			}
+			return u.UnmarshalOGDL([]byte(s))
+		},
+	}, true
+}
+
+func matchTextMarshaler(v reflect.Value) (*Encoding, bool) {
 	var m encoding.TextMarshaler
 	var u encoding.TextUnmarshaler
 	if v.Type().Implements(textMarshalerType) {
