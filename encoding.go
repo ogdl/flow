@@ -6,10 +6,20 @@ package flow
 
 import (
 	"bytes"
+	"encoding"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
+
+type Marshaler interface {
+	MarshalOGDL() ([]byte, error)
+}
+
+type Unmarshaler interface {
+	UnmarshalOGDL([]byte) error
+}
 
 type MatchFunc func(v reflect.Value) (*Encoding, bool)
 
@@ -18,11 +28,18 @@ type Encoding struct {
 	Decode func(parser Parser, v reflect.Value) error
 }
 
-var matchFuncs []MatchFunc
+var (
+	matchFuncs          []MatchFunc
+	marshalerType       = reflect.TypeOf(new(Marshaler)).Elem()
+	unmarshalerType     = reflect.TypeOf(new(Unmarshaler)).Elem()
+	textMarshalerType   = reflect.TypeOf(new(encoding.TextMarshaler)).Elem()
+	textUnmarshalerType = reflect.TypeOf(new(encoding.TextUnmarshaler)).Elem()
+)
 
 func init() {
 	matchFuncs = []MatchFunc{
 		matchValue,
+		matchMarshaler,
 		matchStruct,
 		matchSlice,
 		matchMap,
@@ -46,6 +63,53 @@ func matchValue(v reflect.Value) (*Encoding, bool) {
 		}, true
 	}
 	return nil, false
+}
+
+func matchMarshaler(v reflect.Value) (*Encoding, bool) {
+	var m encoding.TextMarshaler
+	var u encoding.TextUnmarshaler
+	if v.Type().Implements(textMarshalerType) {
+		m = v.Interface().(encoding.TextMarshaler)
+	}
+	if v.Type().Implements(textUnmarshalerType) {
+		u = v.Interface().(encoding.TextUnmarshaler)
+	}
+	if v.CanAddr() {
+		v = v.Addr()
+		if v.Type().Implements(textMarshalerType) {
+			m = v.Interface().(encoding.TextMarshaler)
+		}
+		if v.Type().Implements(textUnmarshalerType) {
+			u = v.Interface().(encoding.TextUnmarshaler)
+		}
+	}
+	if m == nil || u == nil {
+		return nil, false
+	}
+	return &Encoding{
+		func(v reflect.Value, c Composer) error {
+			b, err := m.MarshalText()
+			if err != nil {
+				return err
+			}
+			if bytes.IndexAny(b, "\t :{},") != -1 {
+				b = []byte(strconv.Quote(string(b)))
+			}
+			c.Write(b)
+			return nil
+		},
+		func(parser Parser, v reflect.Value) error {
+			b, err := parser.Value()
+			if err != nil {
+				return err
+			}
+			s, err := strconv.Unquote(string(b))
+			if err != nil {
+				return err
+			}
+			return u.UnmarshalText([]byte(s))
+		},
+	}, true
 }
 
 func matchArray(v reflect.Value) (*Encoding, bool) {

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	//	"time"
+	"time"
 
 	"github.com/hailiang/gspec/core"
 	exp "github.com/hailiang/gspec/expectation"
@@ -177,16 +177,14 @@ var _encodingTestGroups = encodingTestGroups{
 		},
 	},
 
-	/*
-		{"TextMarshaler/TextUnmarshaler",
-			[]encodingTestCase{
-				{func() *time.Time {
-					t := time.Date(2014, 5, 27, 20, 40, 11, 99, time.UTC)
-					return &t
-				}(), "1"},
-			},
+	{"TextMarshaler/TextUnmarshaler",
+		[]encodingTestCase{
+			{func() *time.Time {
+				t := time.Date(2014, 5, 27, 20, 40, 11, 99, time.UTC)
+				return &t
+			}(), `"2014-05-27T20:40:11.000000099Z"`},
 		},
-	*/
+	},
 
 	{"interface",
 		[]encodingTestCase{},
