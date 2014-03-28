@@ -64,7 +64,7 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 	}()
 	for _, match := range matchFuncs {
 		if encoding, ok := match(v); ok && encoding.Decode != nil {
-			return encoding.Decode(dec, v)
+			return encoding.Decode(dec)
 		}
 	}
 	return fmt.Errorf("no decoding method defined for type: %v", v.Type())

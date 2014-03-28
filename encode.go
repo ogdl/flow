@@ -89,7 +89,7 @@ func (enc *Encoder) ComposeAny(v reflect.Value) error {
 	}
 	for _, match := range matchFuncs {
 		if encoding, ok := match(v); ok && encoding.Encode != nil {
-			return encoding.Encode(v, enc)
+			return encoding.Encode(enc)
 		}
 	}
 	switch v.Kind() {

@@ -5,6 +5,8 @@
 package flow
 
 import (
+	"bytes"
+	"encoding"
 	"fmt"
 	"io"
 	"math/big"
@@ -12,9 +14,16 @@ import (
 	"strconv"
 )
 
+type (
+	ValueEncodeFunc func(v reflect.Value, w io.Writer) error
+	ValueDecodeFunc func(val []byte, v reflect.Value) error
+	marshalFunc     func() (text []byte, err error)
+	unmarshalFunc   func(text []byte) error
+)
+
 type ValueEncoding struct {
-	Encode func(v reflect.Value, w io.Writer) error
-	Decode func(val []byte, v reflect.Value) error
+	Encode ValueEncodeFunc
+	Decode ValueDecodeFunc
 }
 
 var typeToValueEncoding = map[reflect.Type]ValueEncoding{
@@ -35,6 +44,42 @@ var typeToValueEncoding = map[reflect.Type]ValueEncoding{
 	reflect.TypeOf(complex64(0)):  ValueEncoding{encodeComplex64, decodeComplex},
 	reflect.TypeOf(complex128(0)): ValueEncoding{encodeComplex128, decodeComplex},
 	reflect.TypeOf(string("")):    ValueEncoding{encodeString, decodeString},
+}
+
+func marshal(f marshalFunc, w io.Writer) error {
+	b, err := f()
+	if err != nil {
+		return err
+	}
+	if bytes.IndexAny(b, "\t :{},") != -1 {
+		b = []byte(strconv.Quote(string(b)))
+	}
+	w.Write(b)
+	return nil
+}
+
+func unmarshal(f unmarshalFunc, val []byte, v reflect.Value) error {
+	s, err := strconv.Unquote(string(val))
+	if err != nil {
+		return err
+	}
+	return f([]byte(s))
+}
+
+func encodeMarshaler(v reflect.Value, w io.Writer) error {
+	return marshal(v.Interface().(Marshaler).MarshalOGDL, w)
+}
+
+func decodeMarshaler(val []byte, v reflect.Value) error {
+	return unmarshal(v.Interface().(Unmarshaler).UnmarshalOGDL, val, v)
+}
+
+func encodeTextMarshaler(v reflect.Value, w io.Writer) error {
+	return marshal(v.Interface().(encoding.TextMarshaler).MarshalText, w)
+}
+
+func decodeTextMarshaler(val []byte, v reflect.Value) error {
+	return unmarshal(v.Interface().(encoding.TextUnmarshaler).UnmarshalText, val, v)
 }
 
 func encodeBool(v reflect.Value, w io.Writer) error {
