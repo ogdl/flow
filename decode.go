@@ -42,18 +42,35 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 		return fmt.Errorf("unsetable nonpointer value: %v", v)
 	}
 	if v.Kind() == reflect.Ptr {
-		v = deref(v).Elem()
+		v = alloc(v).Elem()
 	}
-	if dec.isRef() {
-		id := string(dec.token.val[1:])
-		if err := dec.next(); err != nil {
-			return err
-		}
-		if dec.isSepOrListEnd() {
-			dec.addDstRef(id, v)
-			return nil
-		} else {
-			dec.addSrcRef(id, v)
+	for dec.isRef() || dec.isType() {
+		if dec.isRef() {
+			id := string(dec.token.val[1:])
+			if err := dec.next(); err != nil {
+				return err
+			}
+			if dec.isSepOrListEnd() {
+				dec.addDstRef(id, v)
+				return nil
+			} else {
+				dec.addSrcRef(id, v)
+			}
+		} else if dec.isType() {
+			typ := string(dec.token.val[1:])
+			t, ok := nameToType[typ]
+			if !ok {
+				return fmt.Errorf("type %s is not registered.", typ)
+			}
+			nv := reflect.New(t).Elem()
+			ov := v
+			v = nv
+			defer func() {
+				ov.Set(nv)
+			}()
+			if err := dec.next(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -70,26 +87,14 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 	return fmt.Errorf("no decoding method defined for type: %v", v.Type())
 }
 
-func deref(v reflect.Value) reflect.Value {
-	if isRef(v) {
-		if v.IsNil() && v.Kind() == reflect.Ptr {
-			v.Set(reflect.New(v.Type().Elem()))
-		} // for interface, there is no way to alloc an object, so a register
-		// method is needed
-		if isRef(v.Elem()) {
-			return deref(v.Elem())
-		}
-		return v
+func alloc(v reflect.Value) reflect.Value {
+	if v.IsNil() {
+		v.Set(reflect.New(v.Type().Elem()))
+	}
+	if ve := v.Elem(); ve.Kind() == reflect.Ptr {
+		return alloc(ve)
 	}
 	return v
-}
-
-func isRef(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
-		return true
-	}
-	return false
 }
 
 type refValue struct {

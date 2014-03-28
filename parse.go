@@ -69,6 +69,10 @@ func (t *parser) next() error {
 	return t.err
 }
 
+func (t *parser) isType() bool {
+	return t.isValue() && len(t.token.val) > 0 && t.token.val[0] == '!'
+}
+
 func (t *parser) isRef() bool {
 	return t.isValue() && len(t.token.val) > 0 && t.token.val[0] == '^'
 }

@@ -20,8 +20,6 @@ type cyclicStruct struct {
 	P *cyclicStruct
 }
 
-type intSlice []int
-
 type structKey struct {
 	IKey int
 	SKey string
@@ -129,7 +127,6 @@ var _encodingTestGroups = encodingTestGroups{
 			{[]int(nil), "nil"},
 			{[]int{1}, "{1}"},
 			{[]int{1, 2}, "{1, 2}"},
-			{intSlice{1, 2}, "{1, 2}"},
 		},
 	},
 
@@ -186,10 +183,6 @@ var _encodingTestGroups = encodingTestGroups{
 		},
 	},
 
-	{"interface",
-		[]encodingTestCase{},
-	},
-
 	{"cyclic references",
 		[]encodingTestCase{
 			{func() *cyclicStruct {
@@ -208,6 +201,12 @@ var _encodingTestGroups = encodingTestGroups{
 				i := 42
 				return &struct{ I, J, K *int }{&i, &i, &i}
 			}(), "{I: ^1 42, J: ^1, K: ^1}"},
+		},
+	},
+
+	{"interface",
+		[]encodingTestCase{
+			{struct{ I interface{} }{1}, "{I: !int 1}"},
 		},
 	},
 }
@@ -255,6 +254,8 @@ var marshalIndentTestGroups = encodingTestGroups{
 		},
 	},
 }
+
+var interfaceTestGroups = encodingTestGroups{}
 
 var _ = suite.Add(func(s core.S) {
 	describe := s.Alias("describe")

@@ -221,6 +221,9 @@ func encodeStruct(v reflect.Value) EncodeFunc {
 			if c.Indented() {
 				composeValue(c, strings.Repeat(" ", fieldNameMax-len(fieldName)))
 			}
+			if v.Field(i).Kind() == reflect.Interface {
+				composeValue(c, "!"+v.Field(i).Elem().Type().String()+" ")
+			}
 			return c.ComposeAny(v.Field(i))
 		})
 	}
@@ -321,10 +324,6 @@ func decodeMap(v reflect.Value) DecodeFunc {
 	}
 }
 
-func composeNil(c Composer) error {
-	return composeValue(c, "nil")
-}
-
 func isNil(parser Parser) bool {
 	if val, err := parser.Value(); err == nil {
 		return string(val) == "nil"
@@ -344,6 +343,10 @@ func encodeKey(v reflect.Value) string {
 	en := NewEncoder(&buf)
 	en.Encode(v)
 	return buf.String()
+}
+
+func composeNil(c Composer) error {
+	return composeValue(c, "nil")
 }
 
 func composeValue(c Composer, s string) error {
