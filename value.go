@@ -26,24 +26,24 @@ type ValueEncoding struct {
 	Decode ValueDecodeFunc
 }
 
-var typeToValueEncoding = map[reflect.Type]ValueEncoding{
-	reflect.TypeOf(bool(false)):   ValueEncoding{encodeBool, decodeBool},
-	reflect.TypeOf(int8(0)):       ValueEncoding{encodeInt, decodeInt},
-	reflect.TypeOf(int16(0)):      ValueEncoding{encodeInt, decodeInt},
-	reflect.TypeOf(int32(0)):      ValueEncoding{encodeInt, decodeInt},
-	reflect.TypeOf(int64(0)):      ValueEncoding{encodeInt, decodeInt},
-	reflect.TypeOf(int(0)):        ValueEncoding{encodeInt, decodeInt},
-	reflect.TypeOf(uint8(0)):      ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(uint16(0)):     ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(uint32(0)):     ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(uint64(0)):     ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(uint(0)):       ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(uintptr(0)):    ValueEncoding{encodeUint, decodeUint},
-	reflect.TypeOf(float32(0)):    ValueEncoding{encodeFloat32, decodeFloat32},
-	reflect.TypeOf(float64(0)):    ValueEncoding{encodeFloat64, decodeFloat64},
-	reflect.TypeOf(complex64(0)):  ValueEncoding{encodeComplex64, decodeComplex},
-	reflect.TypeOf(complex128(0)): ValueEncoding{encodeComplex128, decodeComplex},
-	reflect.TypeOf(string("")):    ValueEncoding{encodeString, decodeString},
+var typeToValueEncoding = map[reflect.Kind]ValueEncoding{
+	reflect.Bool:       ValueEncoding{encodeBool, decodeBool},
+	reflect.Int8:       ValueEncoding{encodeInt, decodeInt},
+	reflect.Int16:      ValueEncoding{encodeInt, decodeInt},
+	reflect.Int32:      ValueEncoding{encodeInt, decodeInt},
+	reflect.Int64:      ValueEncoding{encodeInt, decodeInt},
+	reflect.Int:        ValueEncoding{encodeInt, decodeInt},
+	reflect.Uint8:      ValueEncoding{encodeUint, decodeUint},
+	reflect.Uint16:     ValueEncoding{encodeUint, decodeUint},
+	reflect.Uint32:     ValueEncoding{encodeUint, decodeUint},
+	reflect.Uint64:     ValueEncoding{encodeUint, decodeUint},
+	reflect.Uint:       ValueEncoding{encodeUint, decodeUint},
+	reflect.Uintptr:    ValueEncoding{encodeUint, decodeUint},
+	reflect.Float32:    ValueEncoding{encodeFloat32, decodeFloat32},
+	reflect.Float64:    ValueEncoding{encodeFloat64, decodeFloat64},
+	reflect.Complex64:  ValueEncoding{encodeComplex64, decodeComplex},
+	reflect.Complex128: ValueEncoding{encodeComplex128, decodeComplex},
+	reflect.String:     ValueEncoding{encodeString, decodeString},
 }
 
 func marshal(f marshalFunc, w io.Writer) error {

@@ -53,7 +53,7 @@ func init() {
 }
 
 func matchValue(v reflect.Value) (*Encoding, bool) {
-	if valueEncoding, ok := typeToValueEncoding[v.Type()]; ok {
+	if valueEncoding, ok := typeToValueEncoding[v.Kind()]; ok {
 		return &Encoding{
 			valueEncoding.ToEncode(v),
 			valueEncoding.ToDecode(v),
@@ -220,9 +220,6 @@ func encodeStruct(v reflect.Value) EncodeFunc {
 			composeValue(c, ": ")
 			if c.Indented() {
 				composeValue(c, strings.Repeat(" ", fieldNameMax-len(fieldName)))
-			}
-			if v.Field(i).Kind() == reflect.Interface {
-				composeValue(c, "!"+v.Field(i).Elem().Type().String()+" ")
 			}
 			return c.ComposeAny(v.Field(i))
 		})

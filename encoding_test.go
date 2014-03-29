@@ -6,8 +6,8 @@ package flow
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +15,10 @@ import (
 	exp "github.com/hailiang/gspec/expectation"
 	"github.com/hailiang/gspec/suite"
 )
+
+func init() {
+	Register(INT(0))
+}
 
 type cyclicStruct struct {
 	P *cyclicStruct
@@ -50,7 +54,12 @@ func (tgs encodingTestGroups) Test(desc string, s core.S, visit func(tc encoding
 	for _, tg := range tgs {
 		testgroup(tg.typ, func() {
 			for _, tc := range tg.cases {
-				testcase(fmt.Sprint(tc), func() {
+				typ := reflect.TypeOf(tc.value)
+				typStr := ""
+				if typ != nil {
+					typStr = "(" + typ.String() + ") "
+				}
+				testcase(typStr+strconv.Quote(tc.text), func() {
 					visit(tc)
 				})
 			}
@@ -206,10 +215,13 @@ var _encodingTestGroups = encodingTestGroups{
 
 	{"interface",
 		[]encodingTestCase{
+			{INT(1), "!INT 1"},
 			{struct{ I interface{} }{1}, "{I: !int 1}"},
 		},
 	},
 }
+
+type INT int
 
 type structType struct {
 	IVal int

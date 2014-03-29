@@ -66,6 +66,7 @@ func (enc *Encoder) Encode(v interface{}) error {
 			return fmt.Errorf("object with cyclic reference must be addressable, %v", v)
 		}
 	}
+	enc.encodeRootType(rv)
 	if err := enc.ComposeAny(rv); err != nil {
 		return err
 	}
@@ -97,8 +98,7 @@ func (enc *Encoder) ComposeAny(v reflect.Value) error {
 		enc.encodePtr(v)
 	case reflect.Interface:
 		enc.encodeInterface(v)
-	default:
-		// case reflect.Invalid, reflect.Chan, reflect.Func, reflect.UnsafePointer:
+	case reflect.Invalid, reflect.Chan, reflect.Func, reflect.UnsafePointer:
 		return fmt.Errorf("unsupported variable type: %s", v.Type().String())
 	}
 	return nil
@@ -129,7 +129,34 @@ func (enc *Encoder) encodeInterface(v reflect.Value) {
 		enc.encodeNil()
 		return
 	}
-	enc.ComposeAny(v.Elem())
+	v = v.Elem()
+	enc.encodeType(v)
+	enc.ComposeAny(v)
+}
+
+func (enc *Encoder) encodeRootType(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Bool, reflect.Int8, reflect.Int16, reflect.Int32,
+		reflect.Int64, reflect.Int, reflect.Uint8, reflect.Uint16,
+		reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Complex64, reflect.Complex128,
+		reflect.String:
+		if v.Kind().String() != v.Type().Name() {
+			enc.encodeType(v)
+		}
+	}
+}
+
+func (enc *Encoder) encodeType(v reflect.Value) {
+	typ := indirectType(v.Type()).Name()
+	composeValue(enc, "!"+typ+" ")
+}
+
+func indirectType(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		return indirectType(t.Elem())
+	}
+	return t
 }
 
 type refInfo struct {
