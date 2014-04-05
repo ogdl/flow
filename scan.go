@@ -22,6 +22,26 @@ const (
 	tokenComma
 )
 
+func (t tokenType) String() string {
+	switch t {
+	case tokenError:
+		return "tokenError"
+	case tokenEOF:
+		return "tokenEOF"
+	case tokenComment:
+		return "tokenComment"
+	case tokenString:
+		return "tokenString"
+	case tokenLeftBrace:
+		return "tokenLeftBrace"
+	case tokenRightBrace:
+		return "tokenRightBrace"
+	case tokenComma:
+		return "tokenComma"
+	}
+	return "token unkown"
+}
+
 type token struct {
 	typ tokenType
 	pos int

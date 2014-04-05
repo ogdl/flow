@@ -217,7 +217,8 @@ func encodeStruct(v reflect.Value) EncodeFunc {
 		return c.ComposeList(t.NumField(), func(i int) error {
 			fieldName := t.Field(i).Name
 			composeValue(c, fieldName)
-			composeValue(c, ": ")
+			composeValue(c, " ")
+			//composeValue(c, ": ")
 			if c.Indented() {
 				composeValue(c, strings.Repeat(" ", fieldNameMax-len(fieldName)))
 			}
@@ -237,12 +238,14 @@ func decodeStruct(v reflect.Value) DecodeFunc {
 			if field := v.FieldByName(string(fieldName)); field.CanSet() {
 				elem = field
 			}
+			/*
 			if err := parser.GoToOnlyChild(); err != nil {
 				return err
 			}
 			if err := skipColon(parser); err != nil {
 				return err
 			}
+			*/
 			if err := parser.ParseAny(elem); err != nil {
 				return err
 			}
@@ -280,7 +283,8 @@ func encodeMap(v reflect.Value) EncodeFunc {
 		return c.ComposeList(v.Len(), func(i int) error {
 			key := keys[i]
 			composeValue(c, encodeKey(key))
-			composeValue(c, ": ")
+			composeValue(c, " ")
+			//composeValue(c, ": ")
 			/*
 				if c.indented {
 					composeValue(c, strings.Repeat(" ", keyMax-len(key.String())))
@@ -306,12 +310,14 @@ func decodeMap(v reflect.Value) DecodeFunc {
 				return err
 			}
 			elem := reflect.New(v.Type().Elem()).Elem()
+			/*
 			if err := parser.GoToOnlyChild(); err != nil {
 				return err
 			}
 			if err := skipColon(parser); err != nil {
 				return err
 			}
+			*/
 			if err := parser.ParseAny(elem); err != nil {
 				return err
 			}

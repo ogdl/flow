@@ -149,11 +149,11 @@ var _encodingTestGroups = encodingTestGroups{
 	{"struct",
 		[]encodingTestCase{
 			{struct{}{}, "{}"},
-			{struct{ IVal int }{IVal: 1}, "{IVal: 1}"},
+			{struct{ IVal int }{IVal: 1}, "{IVal 1}"},
 			{struct {
 				IntVal    int
 				StringVal string
-			}{IntVal: 1, StringVal: "a"}, `{IntVal: 1, StringVal: "a"}`},
+			}{IntVal: 1, StringVal: "a"}, `{IntVal 1, StringVal "a"}`},
 		},
 	},
 
@@ -161,10 +161,10 @@ var _encodingTestGroups = encodingTestGroups{
 		[]encodingTestCase{
 			{map[string]bool(nil), "nil"},
 			{make(map[string]bool), "{}"},
-			{map[string]bool{"a": true, "b": false}, `{"a": true, "b": false}`},
-			{map[int]bool{1: true, 2: false}, `{1: true, 2: false}`},
+			{map[string]bool{"a": true, "b": false}, `{"a" true, "b" false}`},
+			{map[int]bool{1: true, 2: false}, `{1 true, 2 false}`},
 			{map[structKey]bool{structKey{1, "a"}: true, structKey{2, "b"}: false},
-				`{{IKey: 1, SKey: "a"}: true, {IKey: 2, SKey: "b"}: false}`},
+				`{{IKey 1, SKey "a"} true, {IKey 2, SKey "b"} false}`},
 		},
 	},
 
@@ -179,7 +179,7 @@ var _encodingTestGroups = encodingTestGroups{
 				pi := &i
 				return &pi
 			}(), "2"},
-			{&struct{ I int }{42}, "{I: 42}"},
+			{&struct{ I int }{42}, "{I 42}"},
 		},
 	},
 
@@ -188,7 +188,7 @@ var _encodingTestGroups = encodingTestGroups{
 			{func() *time.Time {
 				t := time.Date(2014, 5, 27, 20, 40, 11, 99, time.UTC)
 				return &t
-			}(), `"2014-05-27T20:40:11.000000099Z"`},
+			}(), `2014-05-27T20:40:11.000000099Z`},
 		},
 	},
 
@@ -198,25 +198,25 @@ var _encodingTestGroups = encodingTestGroups{
 				a := &cyclicStruct{}
 				a.P = a
 				return a
-			}(), "^1 {P: ^1}"},
+			}(), "^1 {P ^1}"},
 			{func() *cyclicStruct {
 				a := &cyclicStruct{}
 				b := &cyclicStruct{}
 				a.P = b
 				b.P = a
 				return a
-			}(), "^1 {P: {P: ^1}}"},
+			}(), "^1 {P {P ^1}}"},
 			{func() *struct{ I, J, K *int } {
 				i := 42
 				return &struct{ I, J, K *int }{&i, &i, &i}
-			}(), "{I: ^1 42, J: ^1, K: ^1}"},
+			}(), "{I ^1 42, J ^1, K ^1}"},
 		},
 	},
 
 	{"interface",
 		[]encodingTestCase{
 			{INT(1), "!INT 1"},
-			{struct{ I interface{} }{1}, "{I: !int 1}"},
+			{struct{ I interface{} }{1}, "{I !int 1}"},
 		},
 	},
 }
@@ -247,7 +247,7 @@ var marshalIndentTestGroups = encodingTestGroups{
 			{struct {
 				IVal int
 				SVal string
-			}{IVal: 1, SVal: "a"}, " {\n   IVal: 1,\n   SVal: \"a\",\n }"},
+			}{IVal: 1, SVal: "a"}, " {\n   IVal 1,\n   SVal \"a\",\n }"},
 		},
 	},
 
@@ -255,13 +255,13 @@ var marshalIndentTestGroups = encodingTestGroups{
 		[]encodingTestCase{
 			{map[string]bool(nil), " nil"},
 			{make(map[string]bool), " {}"},
-			{map[int]bool{1: true, 2: false}, " {\n   1: true,\n   2: false,\n }"},
+			{map[int]bool{1: true, 2: false}, " {\n   1 true,\n   2 false,\n }"},
 			{
 				map[structKey]bool{
 					structKey{1, "a"}: true,
 					structKey{2, "b"}: false,
 				},
-				" {\n   {IKey: 1, SKey: \"a\"}: true,\n   {IKey: 2, SKey: \"b\"}: false,\n }",
+				" {\n   {IKey 1, SKey \"a\"} true,\n   {IKey 2, SKey \"b\"} false,\n }",
 			},
 		},
 	},

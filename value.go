@@ -51,7 +51,7 @@ func marshal(f marshalFunc, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if bytes.IndexAny(b, "\t :{},") != -1 {
+	if bytes.IndexAny(b, "\t {},") != -1 {
 		b = []byte(strconv.Quote(string(b)))
 	}
 	w.Write(b)
@@ -61,7 +61,7 @@ func marshal(f marshalFunc, w io.Writer) error {
 func unmarshal(f unmarshalFunc, val []byte, v reflect.Value) error {
 	s, err := strconv.Unquote(string(val))
 	if err != nil {
-		return err
+		return f(val)
 	}
 	return f([]byte(s))
 }

@@ -86,6 +86,7 @@ var testCases = []testCase{
 			{tokenString, 0, []byte(`"a"`)},
 		},
 	},
+	/*
 	{
 		"a:",
 		[]*token{
@@ -109,6 +110,7 @@ var testCases = []testCase{
 			{tokenString, 3, []byte(":")},
 		},
 	},
+	*/
 	{
 		"/usr/bin",
 		[]*token{

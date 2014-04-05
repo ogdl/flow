@@ -10,11 +10,15 @@ import (
 	"reflect"
 )
 
+type SyntaxComposer interface {
+	ComposeList(length int, composeElem func(i int) error) error
+	Indented() bool
+}
+
 type Composer interface {
 	io.Writer
-	ComposeList(length int, composeElem func(i int) error) error
+	SyntaxComposer
 	ComposeAny(v reflect.Value) error
-	Indented() bool
 }
 
 type composer struct {

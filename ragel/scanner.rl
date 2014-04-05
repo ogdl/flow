@@ -20,12 +20,12 @@
 
 #   raw_char           = char_any - '`';
 #   raw_string         = '`' raw_char* '`';
-    interpreted_char   = (char_inline - '"') | '\\"';
-    interpreted_string = '"' interpreted_char* '"';
-    unquoted_char      = char_visible - (char_delimiter | ':');
-    unquoted_string    = unquoted_char+ | ':';
-#   string             = (raw_string | interpreted_string | unquoted_string);
-    string             = (interpreted_string | unquoted_string);
+    quoted_char        = (char_inline - '"') | '\\"';
+    quoted_string      = '"' quoted_char* '"';
+    unquoted_char      = char_visible - char_delimiter;
+    unquoted_string    = unquoted_char+;
+#   string             = (raw_string | quoted_string | unquoted_string);
+    string             = (quoted_string | unquoted_string);
 
     main := |*
        char_invalid    => onInvalid;
