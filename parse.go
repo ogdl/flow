@@ -28,7 +28,7 @@ func newParser(r io.Reader) *parser {
 
 func (t *parser) ParseList(parseElem func(int) error) error {
 	if !t.isList() {
-		return t.error()
+		return t.Error()
 	}
 	if err := t.GoToOnlyChild(); err != nil {
 		return err
@@ -59,26 +59,26 @@ func (t *parser) nextSibling() error {
 }
 
 func (t *parser) next() error {
-	for t.scan() {
-		if t.token.typ == tokenComment {
+	for t.Scan() {
+		if t.Token().Type == tokenComment {
 			continue
 		} else {
 			break
 		}
 	}
-	return t.err
+	return t.Error()
 }
 
 func (t *parser) isType() bool {
-	return t.isValue() && len(t.token.val) > 0 && t.token.val[0] == '!'
+	return t.isValue() && len(t.Token().Value) > 0 && t.Token().Value[0] == '!'
 }
 
 func (t *parser) isRef() bool {
-	return t.isValue() && len(t.token.val) > 0 && t.token.val[0] == '^'
+	return t.isValue() && len(t.Token().Value) > 0 && t.Token().Value[0] == '^'
 }
 
 func (t *parser) isList() bool {
-	return t.token.typ == tokenLeftBrace
+	return t.Token().Type == tokenLeftBrace
 }
 
 func (t *parser) isNil() bool {
@@ -90,7 +90,7 @@ func (t *parser) isNil() bool {
 }
 
 func (t *parser) isListEnd() bool {
-	return t.token.typ == tokenRightBrace
+	return t.Token().Type == tokenRightBrace
 }
 
 func (t *parser) isSepOrListEnd() bool {
@@ -98,21 +98,21 @@ func (t *parser) isSepOrListEnd() bool {
 }
 
 func (t *parser) isSep() bool {
-	return t.token.typ == tokenComma
+	return t.Token().Type == tokenComma
 }
 
 func (t *parser) isValue() bool {
-	return t.token.typ == tokenString
+	return t.Token().Type == tokenString
 }
 
 func (t *parser) Value() ([]byte, error) {
 	if !t.isValue() {
 		return nil, t.error()
 	}
-	return t.token.val, nil
+	return t.Token().Value, nil
 }
 
 func (t *parser) error() error {
-	return fmt.Errorf("unexpected token: %v, %s", t.token.typ,
-		string(t.token.val))
+	return fmt.Errorf("unexpected token: %v, %s", t.Token().Type,
+		string(t.Token().Value))
 }

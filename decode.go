@@ -46,7 +46,7 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 	}
 	for dec.isRef() || dec.isType() {
 		if dec.isRef() {
-			id := string(dec.token.val[1:])
+			id := string(dec.Token().Value[1:])
 			if err := dec.next(); err != nil {
 				return err
 			}
@@ -57,7 +57,7 @@ func (dec *Decoder) ParseAny(v reflect.Value) (err error) {
 				dec.addSrcRef(id, v)
 			}
 		} else if dec.isType() {
-			typ := string(dec.token.val[1:])
+			typ := string(dec.Token().Value[1:])
 			t, ok := nameToType[typ]
 			if !ok {
 				return fmt.Errorf("type %s is not registered.", typ)

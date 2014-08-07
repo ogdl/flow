@@ -6,21 +6,79 @@ package flow
 
 import (
 	"io"
+
+	"github.com/hailiang/gombi/scan"
 )
 
-const minBufSize = 512
+type scanner struct {
+	*scan.Scanner
+}
 
-type tokenType int
+func (s *scanner) Scan() bool {
+	for s.Scanner.Scan() {
+		if s.Token().Type != tokenSpace {
+			return true
+		}
+	}
+	return false
+}
+
+func newScanner(r io.Reader) *scanner {
+	var (
+		char   = scan.Char
+		pat    = scan.Pat
+		merge  = scan.Merge
+		or     = scan.Or
+		con    = scan.Con
+		Tokens = scan.Tokens
+
+		nonctrl = char(`[:cntrl:]`).Negate()
+		indent  = char(`\t `)
+		lbreak  = char(`\n\r`)
+		space   = merge(indent, lbreak)
+		inline  = merge(nonctrl, indent)
+		any     = merge(nonctrl, space)
+		invalid = any.Negate()
+		delim   = char(`,{}`)
+		empty   = pat(``)
+
+		newline        = or(lbreak, pat(`\r\n`))
+		inlineComment  = con(pat(`//`), inline.ZeroOrMore(), or(newline, empty))
+		quoted         = or(inline.Exclude(char(`"`)), pat(`\\"`))
+		quotedString   = con(pat(`"`), quoted.ZeroOrMore(), pat(`"`))
+		unquoted       = nonctrl.Exclude(merge(delim, char(` `)))
+		unquotedString = unquoted.OneOrMore()
+		generalString  = or(quotedString, unquotedString)
+
+		tokens = Tokens(
+			invalid,
+			inlineComment,
+			char(`{`),
+			char(`}`),
+			char(`,`),
+			generalString,
+			space.OneOrMore(),
+		)
+	)
+	s, err := scan.NewScanner(tokens.String(), r)
+	if err != nil {
+		panic(err)
+	}
+	return &scanner{s}
+}
 
 const (
-	tokenError tokenType = iota
-	tokenEOF
+	tokenError = iota
 	tokenComment
-	tokenString
 	tokenLeftBrace
 	tokenRightBrace
 	tokenComma
+	tokenString
+	tokenSpace
+	tokenEOF
 )
+
+type tokenType int
 
 func (t tokenType) String() string {
 	switch t {
@@ -40,31 +98,4 @@ func (t tokenType) String() string {
 		return "tokenComma"
 	}
 	return "token unkown"
-}
-
-type token struct {
-	typ tokenType
-	pos int
-	val []byte
-}
-
-type scanner struct {
-	r     io.Reader
-	token *token
-	err   error
-	*fsm
-}
-
-func newScanner(r io.Reader) *scanner {
-	return &scanner{
-		r: r,
-	}
-}
-
-func (s *scanner) scan() bool {
-	if s.fsm == nil {
-		s.fsm = newFSM(scanner_start)
-	}
-	s.token, s.err = s.next(s.r)
-	return s.err == nil
 }

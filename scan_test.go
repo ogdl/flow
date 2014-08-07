@@ -12,41 +12,42 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/hailiang/gombi/scan"
 	"github.com/hailiang/gspec/core"
-	"github.com/hailiang/gspec/errors"
+	ge "github.com/hailiang/gspec/error"
 	exp "github.com/hailiang/gspec/expectation"
 	"github.com/hailiang/gspec/suite"
 )
 
 type testCase struct {
 	text   string
-	tokens []*token
+	tokens []scan.Token
 }
 
 var testCases = []testCase{
 	{
 		"a",
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte("a")},
 		},
 	},
 	{
 		"a b",
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenString, 2, []byte("b")},
 		},
 	},
 	{
 		"{}",
-		[]*token{
+		[]scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenRightBrace, 1, []byte("}")},
 		},
 	},
 	{
 		"{a}",
-		[]*token{
+		[]scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenRightBrace, 2, []byte("}")},
@@ -54,7 +55,7 @@ var testCases = []testCase{
 	},
 	{
 		"{a, b}",
-		[]*token{
+		[]scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenComma, 2, []byte(",")},
@@ -64,7 +65,7 @@ var testCases = []testCase{
 	},
 	{
 		"{a,}",
-		[]*token{
+		[]scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenComma, 2, []byte(",")},
@@ -73,7 +74,7 @@ var testCases = []testCase{
 	},
 	{
 		"a{b}",
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenLeftBrace, 1, []byte("{")},
 			{tokenString, 2, []byte("b")},
@@ -82,44 +83,44 @@ var testCases = []testCase{
 	},
 	{
 		`"a"`,
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte(`"a"`)},
 		},
 	},
 	/*
-	{
-		"a:",
-		[]*token{
-			{tokenString, 0, []byte("a")},
-			{tokenString, 1, []byte(":")},
+		{
+			"a:",
+			[]scan.Token{
+				{tokenString, 0, []byte("a")},
+				{tokenString, 1, []byte(":")},
+			},
 		},
-	},
-	{
-		`"a":`,
-		[]*token{
-			{tokenString, 0, []byte(`"a"`)},
-			{tokenString, 3, []byte(`:`)},
+		{
+			`"a":`,
+			[]scan.Token{
+				{tokenString, 0, []byte(`"a"`)},
+				{tokenString, 3, []byte(`:`)},
+			},
 		},
-	},
-	{
-		`{a}:`,
-		[]*token{
-			{tokenLeftBrace, 0, []byte("{")},
-			{tokenString, 1, []byte("a")},
-			{tokenRightBrace, 2, []byte("}")},
-			{tokenString, 3, []byte(":")},
+		{
+			`{a}:`,
+			[]scan.Token{
+				{tokenLeftBrace, 0, []byte("{")},
+				{tokenString, 1, []byte("a")},
+				{tokenRightBrace, 2, []byte("}")},
+				{tokenString, 3, []byte(":")},
+			},
 		},
-	},
 	*/
 	{
 		"/usr/bin",
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte("/usr/bin")},
 		},
 	},
 	{
 		"a //0123",
-		[]*token{
+		[]scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenComment, 2, []byte("//0123")},
 		},
@@ -141,15 +142,17 @@ var _ = suite.Add(func(s core.S) {
 	})
 })
 
-func (s *scanner) scanAll() (tokens []*token) {
-	for s.scan() {
-		tokens = append(tokens, s.token)
+func (s *scanner) scanAll() (tokens []scan.Token) {
+	for s.Scan() {
+		tokens = append(tokens, s.Token())
 	}
 	return
 }
 
 func TestAll(t *testing.T) {
-	suite.Run(t, false)
+	//	for i := 0; i < 500; i++ {
+	suite.Test(t)
+	//	}
 }
 
 func p(v ...interface{}) {
@@ -157,9 +160,7 @@ func p(v ...interface{}) {
 }
 
 func init() {
-	errors.Sprint = flowPrint
-	//	errors.Sprint = jsonPrint
-	//errors.Sprint = dumpPrint
+	ge.Sprint = flowPrint
 }
 
 func flowPrint(v interface{}) string {
