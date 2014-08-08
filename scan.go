@@ -32,21 +32,21 @@ func newScanner(r io.Reader) *scanner {
 		con    = scan.Con
 		Tokens = scan.Tokens
 
-		nonctrl = char(`[:cntrl:]`).Negate()
-		indent  = char(`\t `)
-		lbreak  = char(`\n\r`)
-		space   = merge(indent, lbreak)
-		inline  = merge(nonctrl, indent)
-		any     = merge(nonctrl, space)
-		invalid = any.Negate()
-		delim   = char(`,{}`)
-		empty   = pat(``)
+		nonctrl   = char(`[:cntrl:]`).Negate()
+		indent    = char(`\t `)
+		lineBreak = char(`\n\r`)
+		space     = merge(indent, lineBreak)
+		any       = merge(nonctrl, space)
+		invalid   = any.Negate()
+		inline    = any.Exclude(lineBreak)
+		delim     = char(`,{}`)
+		empty     = pat(``)
 
-		newline        = or(lbreak, pat(`\r\n`))
+		newline        = or(lineBreak, pat(`\r\n`))
 		inlineComment  = con(pat(`//`), inline.ZeroOrMore(), or(newline, empty))
 		quoted         = or(inline.Exclude(char(`"`)), pat(`\\"`))
 		quotedString   = con(pat(`"`), quoted.ZeroOrMore(), pat(`"`))
-		unquoted       = nonctrl.Exclude(merge(delim, char(` `)))
+		unquoted       = any.Exclude(delim, space)
 		unquotedString = unquoted.OneOrMore()
 		generalString  = or(quotedString, unquotedString)
 
