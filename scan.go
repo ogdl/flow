@@ -10,12 +10,45 @@ import (
 	"github.com/hailiang/gombi/scan"
 )
 
+const (
+	tokenError = iota
+	tokenComment
+	tokenLeftBrace
+	tokenRightBrace
+	tokenComma
+	tokenString
+	tokenSpace
+	tokenEOF
+)
+
+type tokenType int
+
+func (t tokenType) String() string {
+	switch t {
+	case tokenError:
+		return "tokenError"
+	case tokenEOF:
+		return "tokenEOF"
+	case tokenComment:
+		return "tokenComment"
+	case tokenString:
+		return "tokenString"
+	case tokenLeftBrace:
+		return "tokenLeftBrace"
+	case tokenRightBrace:
+		return "tokenRightBrace"
+	case tokenComma:
+		return "tokenComma"
+	}
+	return "token unkown"
+}
+
 type scanner struct {
-	*scan.Scanner
+	*scan.UTF8Scanner
 }
 
 func (s *scanner) Scan() bool {
-	for s.Scanner.Scan() {
+	for s.UTF8Scanner.Scan() {
 		if s.Token().Type != tokenSpace {
 			return true
 		}
@@ -60,42 +93,10 @@ func newScanner(r io.Reader) *scanner {
 			space.OneOrMore(),
 		)
 	)
-	s, err := scan.NewScanner(tokens.String(), r)
+	s := scan.NewUTF8Scanner(tokens.String())
+	err := s.Init(r)
 	if err != nil {
 		panic(err)
 	}
 	return &scanner{s}
-}
-
-const (
-	tokenError = iota
-	tokenComment
-	tokenLeftBrace
-	tokenRightBrace
-	tokenComma
-	tokenString
-	tokenSpace
-	tokenEOF
-)
-
-type tokenType int
-
-func (t tokenType) String() string {
-	switch t {
-	case tokenError:
-		return "tokenError"
-	case tokenEOF:
-		return "tokenEOF"
-	case tokenComment:
-		return "tokenComment"
-	case tokenString:
-		return "tokenString"
-	case tokenLeftBrace:
-		return "tokenLeftBrace"
-	case tokenRightBrace:
-		return "tokenRightBrace"
-	case tokenComma:
-		return "tokenComma"
-	}
-	return "token unkown"
 }
