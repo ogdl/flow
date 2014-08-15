@@ -60,7 +60,7 @@ func (t *parser) nextSibling() error {
 
 func (t *parser) next() error {
 	for t.Scan() {
-		if t.Token().Type == tokenComment {
+		if t.Token().ID == tokenComment {
 			continue
 		} else {
 			break
@@ -78,7 +78,7 @@ func (t *parser) isRef() bool {
 }
 
 func (t *parser) isList() bool {
-	return t.Token().Type == tokenLeftBrace
+	return t.Token().ID == tokenLeftBrace
 }
 
 func (t *parser) isNil() bool {
@@ -90,7 +90,7 @@ func (t *parser) isNil() bool {
 }
 
 func (t *parser) isListEnd() bool {
-	return t.Token().Type == tokenRightBrace
+	return t.Token().ID == tokenRightBrace
 }
 
 func (t *parser) isSepOrListEnd() bool {
@@ -98,11 +98,11 @@ func (t *parser) isSepOrListEnd() bool {
 }
 
 func (t *parser) isSep() bool {
-	return t.Token().Type == tokenComma
+	return t.Token().ID == tokenComma
 }
 
 func (t *parser) isValue() bool {
-	return t.Token().Type == tokenString
+	return t.Token().ID == tokenString
 }
 
 func (t *parser) Value() ([]byte, error) {
@@ -113,6 +113,6 @@ func (t *parser) Value() ([]byte, error) {
 }
 
 func (t *parser) error() error {
-	return fmt.Errorf("unexpected token: %v, %s", t.Token().Type,
+	return fmt.Errorf("unexpected token: %v, %s", t.Token().ID,
 		string(t.Token().Value))
 }

@@ -21,33 +21,33 @@ import (
 
 type testCase struct {
 	text   string
-	tokens []scan.Token
+	tokens []*scan.Token
 }
 
 var testCases = []testCase{
 	{
 		"a",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte("a")},
 		},
 	},
 	{
 		"a b",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenString, 2, []byte("b")},
 		},
 	},
 	{
 		"{}",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenRightBrace, 1, []byte("}")},
 		},
 	},
 	{
 		"{a}",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenRightBrace, 2, []byte("}")},
@@ -55,7 +55,7 @@ var testCases = []testCase{
 	},
 	{
 		"{a, b}",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenComma, 2, []byte(",")},
@@ -65,7 +65,7 @@ var testCases = []testCase{
 	},
 	{
 		"{a,}",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenLeftBrace, 0, []byte("{")},
 			{tokenString, 1, []byte("a")},
 			{tokenComma, 2, []byte(",")},
@@ -74,7 +74,7 @@ var testCases = []testCase{
 	},
 	{
 		"a{b}",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenLeftBrace, 1, []byte("{")},
 			{tokenString, 2, []byte("b")},
@@ -83,28 +83,28 @@ var testCases = []testCase{
 	},
 	{
 		`"a"`,
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte(`"a"`)},
 		},
 	},
 	/*
 		{
 			"a:",
-			[]scan.Token{
+			[]*scan.Token{
 				{tokenString, 0, []byte("a")},
 				{tokenString, 1, []byte(":")},
 			},
 		},
 		{
 			`"a":`,
-			[]scan.Token{
+			[]*scan.Token{
 				{tokenString, 0, []byte(`"a"`)},
 				{tokenString, 3, []byte(`:`)},
 			},
 		},
 		{
 			`{a}:`,
-			[]scan.Token{
+			[]*scan.Token{
 				{tokenLeftBrace, 0, []byte("{")},
 				{tokenString, 1, []byte("a")},
 				{tokenRightBrace, 2, []byte("}")},
@@ -114,13 +114,13 @@ var testCases = []testCase{
 	*/
 	{
 		"/usr/bin",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte("/usr/bin")},
 		},
 	},
 	{
 		"a //0123",
-		[]scan.Token{
+		[]*scan.Token{
 			{tokenString, 0, []byte("a")},
 			{tokenComment, 2, []byte("//0123")},
 		},
@@ -142,7 +142,7 @@ var _ = suite.Add(func(s core.S) {
 	})
 })
 
-func (s *scanner) scanAll() (tokens []scan.Token) {
+func (s *scanner) scanAll() (tokens []*scan.Token) {
 	for s.Scan() {
 		tokens = append(tokens, s.Token())
 	}

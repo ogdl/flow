@@ -49,7 +49,7 @@ type scanner struct {
 
 func (s *scanner) Scan() bool {
 	for s.UTF8Scanner.Scan() {
-		if s.Token().Type != tokenSpace {
+		if s.Token().ID != tokenSpace {
 			return true
 		}
 	}
@@ -58,12 +58,11 @@ func (s *scanner) Scan() bool {
 
 func newScanner(r io.Reader) *scanner {
 	var (
-		char   = scan.Char
-		pat    = scan.Pat
-		merge  = scan.Merge
-		or     = scan.Or
-		con    = scan.Con
-		Tokens = scan.Tokens
+		char  = scan.Char
+		pat   = scan.Pat
+		merge = scan.Merge
+		or    = scan.Or
+		con   = scan.Con
 
 		nonctrl   = char(`[:cntrl:]`).Negate()
 		indent    = char(`\t `)
@@ -83,7 +82,7 @@ func newScanner(r io.Reader) *scanner {
 		unquotedString = unquoted.OneOrMore()
 		generalString  = or(quotedString, unquotedString)
 
-		tokens = Tokens(
+		matcher = scan.NewMatcher(
 			invalid,
 			inlineComment,
 			char(`{`),
@@ -93,7 +92,7 @@ func newScanner(r io.Reader) *scanner {
 			space.OneOrMore(),
 		)
 	)
-	s := scan.NewUTF8Scanner(tokens.String())
+	s := scan.NewUTF8Scanner(matcher)
 	err := s.Init(r)
 	if err != nil {
 		panic(err)
