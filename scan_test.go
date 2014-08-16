@@ -28,63 +28,63 @@ var testCases = []testCase{
 	{
 		"a",
 		[]*scan.Token{
-			{tokenString, 0, []byte("a")},
+			{tokenString, []byte("a"), 0},
 		},
 	},
 	{
 		"a b",
 		[]*scan.Token{
-			{tokenString, 0, []byte("a")},
-			{tokenString, 2, []byte("b")},
+			{tokenString, []byte("a"), 0},
+			{tokenString, []byte("b"), 2},
 		},
 	},
 	{
 		"{}",
 		[]*scan.Token{
-			{tokenLeftBrace, 0, []byte("{")},
-			{tokenRightBrace, 1, []byte("}")},
+			{tokenLeftBrace, []byte("{"), 0},
+			{tokenRightBrace, []byte("}"), 1},
 		},
 	},
 	{
 		"{a}",
 		[]*scan.Token{
-			{tokenLeftBrace, 0, []byte("{")},
-			{tokenString, 1, []byte("a")},
-			{tokenRightBrace, 2, []byte("}")},
+			{tokenLeftBrace, []byte("{"), 0},
+			{tokenString, []byte("a"), 1},
+			{tokenRightBrace, []byte("}"), 2},
 		},
 	},
 	{
 		"{a, b}",
 		[]*scan.Token{
-			{tokenLeftBrace, 0, []byte("{")},
-			{tokenString, 1, []byte("a")},
-			{tokenComma, 2, []byte(",")},
-			{tokenString, 4, []byte("b")},
-			{tokenRightBrace, 5, []byte("}")},
+			{tokenLeftBrace, []byte("{"), 0},
+			{tokenString, []byte("a"), 1},
+			{tokenComma, []byte(","), 2},
+			{tokenString, []byte("b"), 4},
+			{tokenRightBrace, []byte("}"), 5},
 		},
 	},
 	{
 		"{a,}",
 		[]*scan.Token{
-			{tokenLeftBrace, 0, []byte("{")},
-			{tokenString, 1, []byte("a")},
-			{tokenComma, 2, []byte(",")},
-			{tokenRightBrace, 3, []byte("}")},
+			{tokenLeftBrace, []byte("{"), 0},
+			{tokenString, []byte("a"), 1},
+			{tokenComma, []byte(","), 2},
+			{tokenRightBrace, []byte("}"), 3},
 		},
 	},
 	{
 		"a{b}",
 		[]*scan.Token{
-			{tokenString, 0, []byte("a")},
-			{tokenLeftBrace, 1, []byte("{")},
-			{tokenString, 2, []byte("b")},
-			{tokenRightBrace, 3, []byte("}")},
+			{tokenString, []byte("a"), 0},
+			{tokenLeftBrace, []byte("{"), 1},
+			{tokenString, []byte("b"), 2},
+			{tokenRightBrace, []byte("}"), 3},
 		},
 	},
 	{
 		`"a"`,
 		[]*scan.Token{
-			{tokenString, 0, []byte(`"a"`)},
+			{tokenString, []byte(`"a"`), 0},
 		},
 	},
 	/*
@@ -115,14 +115,14 @@ var testCases = []testCase{
 	{
 		"/usr/bin",
 		[]*scan.Token{
-			{tokenString, 0, []byte("/usr/bin")},
+			{tokenString, []byte("/usr/bin"), 0},
 		},
 	},
 	{
 		"a //0123",
 		[]*scan.Token{
-			{tokenString, 0, []byte("a")},
-			{tokenComment, 2, []byte("//0123")},
+			{tokenString, []byte("a"), 0},
+			{tokenComment, []byte("//0123"), 2},
 		},
 	},
 }
@@ -136,7 +136,10 @@ var _ = suite.Add(func(s core.S) {
 			testcase(fmt.Sprint(tc), func() {
 				s := newScanner(strings.NewReader(tc.text))
 				tokens := s.scanAll()
+				expect(len(tokens)).NotEqual(0)
+				tokens, eof := tokens[:len(tokens)-1], tokens[len(tokens)-1]
 				expect(tokens).Equal(tc.tokens)
+				expect(eof.ID).Equal(scan.EOF)
 			})
 		}
 	})

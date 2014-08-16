@@ -11,22 +11,19 @@ import (
 )
 
 const (
-	tokenError = iota
+	tokenEOF = iota
 	tokenComment
 	tokenLeftBrace
 	tokenRightBrace
 	tokenComma
 	tokenString
 	tokenSpace
-	tokenEOF
 )
 
 type tokenType int
 
 func (t tokenType) String() string {
 	switch t {
-	case tokenError:
-		return "tokenError"
 	case tokenEOF:
 		return "tokenEOF"
 	case tokenComment:
@@ -44,11 +41,11 @@ func (t tokenType) String() string {
 }
 
 type scanner struct {
-	*scan.UTF8Scanner
+	scan.Scanner
 }
 
 func (s *scanner) Scan() bool {
-	for s.UTF8Scanner.Scan() {
+	for s.Scanner.Scan() {
 		if s.Token().ID != tokenSpace {
 			return true
 		}
@@ -69,10 +66,10 @@ func newScanner(r io.Reader) *scanner {
 		lineBreak = char(`\n\r`)
 		space     = merge(indent, lineBreak)
 		any       = merge(nonctrl, space)
-		invalid   = any.Negate()
 		inline    = any.Exclude(lineBreak)
 		delim     = char(`,{}`)
 		empty     = pat(``)
+		//invalid   = any.Negate()
 
 		newline        = or(lineBreak, pat(`\r\n`))
 		inlineComment  = con(pat(`//`), inline.ZeroOrMore(), or(newline, empty))
@@ -83,7 +80,6 @@ func newScanner(r io.Reader) *scanner {
 		generalString  = or(quotedString, unquotedString)
 
 		matcher = scan.NewMatcher(
-			invalid,
 			inlineComment,
 			char(`{`),
 			char(`}`),
