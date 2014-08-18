@@ -89,7 +89,7 @@ func newScanner(r io.Reader) *scanner {
 		)
 	)
 	s := scan.NewUTF8Scanner(matcher)
-	err := s.Init(r)
+	err := s.SetReader(r)
 	if err != nil {
 		panic(err)
 	}
