@@ -11,9 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hailiang/gspec/core"
-	exp "github.com/hailiang/gspec/expectation"
-	"github.com/hailiang/gspec/suite"
+	"github.com/hailiang/gspec"
 )
 
 func init() {
@@ -49,7 +47,7 @@ type encodingTestGroup struct {
 
 type encodingTestGroups []encodingTestGroup
 
-func (tgs encodingTestGroups) Test(desc string, s core.S, visit func(tc encodingTestCase)) {
+func (tgs encodingTestGroups) Test(desc string, s gspec.S, visit func(tc encodingTestCase)) {
 	testgroup, testcase := s.Alias(desc), s.Alias("testcase")
 	for _, tg := range tgs {
 		testgroup(tg.typ, func() {
@@ -269,9 +267,9 @@ var marshalIndentTestGroups = encodingTestGroups{
 
 var interfaceTestGroups = encodingTestGroups{}
 
-var _ = suite.Add(func(s core.S) {
+var _ = gspec.Add(func(s gspec.S) {
 	describe := s.Alias("describe")
-	expect := exp.Alias(s.Fail)
+	expect := gspec.Expect(s.Fail)
 
 	describe("Encoder", func() {
 		var buf bytes.Buffer

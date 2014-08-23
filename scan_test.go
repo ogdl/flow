@@ -13,11 +13,10 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/hailiang/gombi/scan"
-	"github.com/hailiang/gspec/core"
-	ge "github.com/hailiang/gspec/error"
-	exp "github.com/hailiang/gspec/expectation"
-	"github.com/hailiang/gspec/suite"
+	"github.com/hailiang/gspec"
 )
+
+const EOF = 0
 
 type testCase struct {
 	text   string
@@ -127,9 +126,9 @@ var testCases = []testCase{
 	},
 }
 
-var _ = suite.Add(func(s core.S) {
+var _ = gspec.Add(func(s gspec.S) {
 	describe, testcase := s.Alias("describe"), s.Alias("testcase")
-	expect := exp.Alias(s.Fail)
+	expect := gspec.Expect(s.Fail)
 
 	describe("flow.scanner", func() {
 		for _, tc := range testCases {
@@ -139,7 +138,7 @@ var _ = suite.Add(func(s core.S) {
 				expect(len(tokens)).NotEqual(0)
 				tokens, eof := tokens[:len(tokens)-1], tokens[len(tokens)-1]
 				expect(tokens).Equal(tc.tokens)
-				expect(eof.ID).Equal(scan.EOF)
+				expect(eof.ID).Equal(EOF)
 			})
 		}
 	})
@@ -154,7 +153,7 @@ func (s *scanner) scanAll() (tokens []*scan.Token) {
 
 func TestAll(t *testing.T) {
 	//	for i := 0; i < 500; i++ {
-	suite.Test(t)
+	gspec.Test(t)
 	//	}
 }
 
@@ -163,10 +162,10 @@ func p(v ...interface{}) {
 }
 
 func init() {
-	ge.Sprint = flowPrint
+	gspec.SetSprint(ogdlPrint)
 }
 
-func flowPrint(v interface{}) string {
+func ogdlPrint(v interface{}) string {
 	buf, _ := MarshalIndent(v, "    ", "    ")
 	typ := ""
 	if v != nil {
