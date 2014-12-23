@@ -7,7 +7,7 @@ package flow
 import (
 	"io"
 
-	"github.com/hailiang/gombi/scan"
+	"h12.me/gombi/experiment/gre/scan"
 )
 
 const (

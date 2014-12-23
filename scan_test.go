@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/hailiang/gombi/scan"
-	"github.com/hailiang/gspec"
+	"h12.me/gombi/experiment/gre/scan"
+	"h12.me/gspec"
 )
 
 const EOF = 0

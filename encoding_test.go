@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hailiang/gspec"
+	"h12.me/gspec"
 )
 
 func init() {
