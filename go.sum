@@ -1,0 +1,6 @@
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+h12.io/gombi v0.0.0-20180505161737-1db564f24381 h1:LVvhxLt4qwjCrpgf/Sdkd3gFKGJ77oPm83dRhOJ6LSk=
+h12.io/gombi v0.0.0-20180505161737-1db564f24381/go.mod h1:WEPImgkt5gg3sxcZ3ndRkEPR9dZAz2H4jBH8mRfblGc=
+h12.io/gspec v0.0.0-20180505161830-37536b8428fa h1:pc0I67ekFZNLy3p7w7GMUAXHm9v01nZdBkXSOCfvMqs=
+h12.io/gspec v0.0.0-20180505161830-37536b8428fa/go.mod h1:9cFJky/zJGy0IRJpbEonyevN8gs8Ja1tLFIMRjFdArY=
